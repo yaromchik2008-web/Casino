@@ -26,8 +26,9 @@ export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
-// Промокоди: кожен можна використати один раз. Суми в копійках.
+// Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS.
 const PROMO_CODES: Record<string, number> = { sosunok: 100000 };
+const REUSABLE_PROMOS = ['sosunok'];
 
 export interface PlayerState {
   balance: number;
@@ -490,8 +491,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const code = raw.trim().toLowerCase();
       const amount = PROMO_CODES[code];
       if (!amount) return 'invalid' as const;
-      if (stateRef.current.promoUsed.includes(code)) return 'used' as const;
-      commit((p) => ({ ...p, balance: p.balance + amount, promoUsed: [...p.promoUsed, code] }));
+      if (!REUSABLE_PROMOS.includes(code) && stateRef.current.promoUsed.includes(code)) return 'used' as const;
+      commit((p) => ({
+        ...p,
+        balance: p.balance + amount,
+        promoUsed: p.promoUsed.includes(code) ? p.promoUsed : [...p.promoUsed, code],
+      }));
       return amount;
     },
     [commit],
