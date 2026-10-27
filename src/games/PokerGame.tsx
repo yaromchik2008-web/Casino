@@ -80,7 +80,7 @@ export function PokerGame({ game }: { game: GameInfo }) {
       const won = bet * HANDS[result].pay;
       wallet.win(game.id, won);
       haptic('win');
-      setMessage({ text: `${HANDS[result].name}! +${formatCoins(won)} 🪙`, tone: 'win' });
+      setMessage({ text: `${HANDS[result].name}! +${formatCoins(won)}`, tone: 'win' });
     } else {
       setMessage({ text: 'Без комбінації', tone: 'lose' });
     }

@@ -121,7 +121,8 @@ export function evaluateGrid(config: SlotConfig, grid: Grid, bet: number): SlotR
 export function classicSymbols(emojis: string[]): SlotSymbol[] {
   const weights = [30, 26, 22, 14, 9, 6, 4];
   const pays = [15, 20, 30, 45, 80, 150, 300];
-  return emojis.map((emoji, i) => ({ id: `c${i}`, emoji, weight: weights[i], pays: [pays[i]] }));
+  // ×0.94: RTP ≈ 0.90, виграш приблизно кожен 5-й оберт.
+  return emojis.map((emoji, i) => ({ id: `c${i}`, emoji, weight: weights[i], pays: [Math.round(pays[i] * 0.94 * 10) / 10] }));
 }
 
 // 5-барабанний набір: 6 звичайних символів, wild і scatter.
@@ -136,7 +137,8 @@ export function videoSymbols(emojis: string[], wild: string, scatter: string): S
     [45, 150, 600],
   ];
   return [
-    ...emojis.map((emoji, i) => ({ id: `v${i}`, emoji, weight: weights[i], pays: pays[i] })),
+    // ×0.95: RTP ≈ 0.89 з фриспінами.
+    ...emojis.map((emoji, i) => ({ id: `v${i}`, emoji, weight: weights[i], pays: pays[i].map((p) => Math.round(p * 0.95 * 10) / 10) })),
     { id: 'wild', emoji: wild, weight: 3, pays: [60, 240, 900] },
     { id: 'scatter', emoji: scatter, weight: 3, pays: [] },
   ];

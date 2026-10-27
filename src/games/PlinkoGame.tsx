@@ -6,7 +6,7 @@ import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 
 const ROWS = 10;
-const BUCKETS = [11, 5, 2, 1.3, 0.7, 0.4, 0.7, 1.3, 2, 5, 11];
+const BUCKETS = [10, 4, 2, 1.2, 0.7, 0.4, 0.7, 1.2, 2, 4, 10]; // RTP ≈ 0.94
 const STEP_MS = 110;
 
 function bucketColor(m: number) {
@@ -53,7 +53,7 @@ export function PlinkoGame({ game }: { game: GameInfo }) {
         wallet.win(game.id, won);
         if (mult >= 1) haptic('win');
         setLastBucket(pos);
-        setMessage({ text: `×${mult}: ${won >= bet ? '+' : ''}${formatCoins(won)} 🪙`, tone: mult >= 1 ? 'win' : 'lose' });
+        setMessage({ text: `×${mult}: ${won >= bet ? '+' : ''}${formatCoins(won)}`, tone: mult >= 1 ? 'win' : 'lose' });
         setTimeout(() => setBall(null), 300);
       }
     }, STEP_MS);

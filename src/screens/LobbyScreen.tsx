@@ -6,7 +6,7 @@ import { CATEGORIES, Category, GAMES, GameInfo, findGame } from '../games/catalo
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 
-type Tab = 'lobby' | 'bonuses' | 'tournaments' | 'profile';
+import type { Tab } from '../navigation';
 
 const SECTIONS: { title: string; filter: (g: GameInfo) => boolean }[] = [
   { title: '🔥 Популярні', filter: (g) => g.categories.includes('popular') },
@@ -40,31 +40,52 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
   const banners = [
     {
       title: 'Щоденний бонус',
-      text: 'Заходь щодня і забирай до 10 000 🪙',
+      text: 'Заходь щодня і забирай до 100 ₴',
       colors: ['#F43F5E', '#7C3AED'] as const,
       emoji: '🎁',
       action: () => onNavigate('bonuses'),
     },
     {
       title: 'Тижневий турнір',
-      text: 'Призовий фонд 122 500 🪙. Вигравай і піднімайся в рейтингу',
+      text: 'Призовий фонд 1 225 ₴. Вигравай і піднімайся в рейтингу',
       colors: ['#0EA5E9', '#1E3A8A'] as const,
       emoji: '🏆',
       action: () => onNavigate('tournaments'),
     },
     {
-      title: `Джекпот ${formatCoins(wallet.state.jackpotPool)} 🪙`,
+      title: `Джекпот ${formatCoins(wallet.state.jackpotPool)}`,
       text: 'Росте з кожною ставкою. Спробуй «Діамантовий джекпот»',
       colors: ['#EAB308', '#9A3412'] as const,
       emoji: '💎',
       action: () => onOpenGame('diamond-jackpot'),
     },
     {
-      title: 'Нова гра: Ракета',
-      text: 'Встигни забрати виграш до вибуху!',
-      colors: ['#8B5CF6', '#312E81'] as const,
-      emoji: '🚀',
-      action: () => onOpenGame('crash'),
+      title: 'Нове: Фруктова лавина',
+      text: 'Каскади, бомби-множники до ×100 і «Купити бонус»',
+      colors: ['#22C55E', '#14532D'] as const,
+      emoji: '🍉',
+      action: () => onOpenGame('fruit-avalanche'),
+    },
+    {
+      title: 'Утримай і виграй',
+      text: '«Скарби фараона»: монети, нові ряди і 4 джекпоти',
+      colors: ['#D97706', '#451A03'] as const,
+      emoji: '🏺',
+      action: () => onOpenGame('pharaoh'),
+    },
+    {
+      title: 'Ставки на спорт',
+      text: 'Футбол, баскетбол, теніс, хокей. Матч за 4 хвилини',
+      colors: ['#16A34A', '#0F172A'] as const,
+      emoji: '⚽',
+      action: () => onNavigate('sport'),
+    },
+    {
+      title: 'Шахта',
+      text: 'Розбивай блоки, шукай золото і діаманти',
+      colors: ['#78716C', '#1C1917'] as const,
+      emoji: '⛏️',
+      action: () => onOpenGame('shakhta'),
     },
   ];
 

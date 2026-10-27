@@ -11,10 +11,15 @@ import {
   levelReward,
   weekId,
 } from './progress';
+import { formatCoins } from '../theme';
+import { ACHIEVEMENTS } from './achievements';
+import { INCOME_CAP_HOURS, SELL_RATE, findItem, hourlyIncome } from './shop';
+import { SportBet, SportPick, betResult } from './sports';
+import { PICKAXES } from '../games/mineEngine';
 
-const KEY = 'freecasino:player:v2';
+const KEY = 'freecasino:player:v3';
 
-export const START_BALANCE = 5000;
+export const START_BALANCE = 50000; // усі суми в копійках: 50000 = 500,00 ₴
 export const HOURLY_BONUS = 500;
 export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
@@ -45,6 +50,12 @@ export interface PlayerState {
   missionClaimed: string[];
   tournamentWeek: string;
   tournamentPoints: number;
+  pickaxe: number;
+  owned: string[];
+  incomeAt: number;
+  stats: Record<string, number>;
+  achievements: string[];
+  sportBets: SportBet[];
 }
 
 function initialState(): PlayerState {
@@ -72,6 +83,12 @@ function initialState(): PlayerState {
     missionClaimed: [],
     tournamentWeek: weekId(),
     tournamentPoints: 0,
+    pickaxe: 0,
+    owned: [],
+    incomeAt: Date.now(),
+    stats: {},
+    achievements: [],
+    sportBets: [],
   };
 }
 
@@ -87,7 +104,7 @@ function rollPeriods(s: PlayerState, notes: string[]): PlayerState {
     const rows = leaderboard(next.tournamentWeek, next.tournamentPoints, 1);
     const place = rows.findIndex((r) => r.me);
     const prize = next.tournamentPoints > 0 ? TOURNAMENT_PRIZES[place] ?? 0 : 0;
-    if (prize > 0) notes.push(`Турнір завершено: ${place + 1} місце, приз ${prize} 🪙`);
+    if (prize > 0) notes.push(`Турнір завершено: ${place + 1} місце, приз ${formatCoins(prize)}`);
     next = {
       ...next,
       balance: next.balance + prize,
@@ -112,6 +129,16 @@ interface WalletApi {
   claimMission: (id: string) => number;
   winJackpot: () => number;
   toggleFavorite: (gameId: string) => void;
+  spend: (amount: number) => boolean;
+  credit: (amount: number) => void;
+  track: (stat: string, n?: number) => void;
+  buyItem: (id: string) => boolean;
+  sellItem: (id: string) => number;
+  pendingIncome: () => number;
+  collectIncome: () => number;
+  buyPickaxe: (level: number) => boolean;
+  claimAchievement: (id: string) => number;
+  placeSportBet: (picks: SportPick[], stake: number) => boolean;
   openGame: (gameId: string) => void;
   reset: () => void;
 }
@@ -141,7 +168,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         let reward = 0;
         for (let l = next.level + 1; l <= level; l++) reward += levelReward(l);
         next = { ...next, level, balance: next.balance + reward };
-        notes.push(`Новий рівень: ${levelName(level)}! +${reward} 🪙`);
+        notes.push(`Новий рівень: ${levelName(level)}! +${formatCoins(reward)}`);
       }
       stateRef.current = next;
       setState(next);
@@ -269,6 +296,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       biggestWin: Math.max(p.biggestWin, amount),
       tournamentPoints: p.tournamentPoints + amount,
       jackpotPool: JACKPOT_SEED,
+      stats: { ...p.stats, jackpots: (p.stats.jackpots ?? 0) + 1 },
     }));
     return amount;
   }, [commit]);
@@ -292,11 +320,165 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const spend = useCallback(
+    (amount: number) => {
+      if (amount <= 0 || stateRef.current.balance < amount) return false;
+      commit((p) => ({ ...p, balance: p.balance - amount }));
+      return true;
+    },
+    [commit],
+  );
+
+  const credit = useCallback(
+    (amount: number) => {
+      if (amount > 0) commit((p) => ({ ...p, balance: p.balance + Math.round(amount) }));
+    },
+    [commit],
+  );
+
+  const track = useCallback(
+    (stat: string, n = 1) => {
+      commit((p) => ({ ...p, stats: { ...p.stats, [stat]: (p.stats[stat] ?? 0) + n } }));
+    },
+    [commit],
+  );
+
+  const pendingIncome = useCallback(() => {
+    const s = stateRef.current;
+    const hours = Math.min(INCOME_CAP_HOURS, (Date.now() - s.incomeAt) / 3600000);
+    return Math.floor(hourlyIncome(s.owned) * hours);
+  }, []);
+
+  const collectIncome = useCallback(() => {
+    const amount = pendingIncome();
+    commit((p) => ({ ...p, balance: p.balance + amount, incomeAt: Date.now() }));
+    return amount;
+  }, [commit, pendingIncome]);
+
+  const buyItem = useCallback(
+    (id: string) => {
+      const item = findItem(id);
+      const s = stateRef.current;
+      if (!item || s.owned.includes(id) || s.balance < item.price) return false;
+      // Дохід, що вже набіг, зараховуємо до покупки, щоб новий бізнес не платив за минуле.
+      const income = pendingIncome();
+      commit((p) => ({
+        ...p,
+        balance: p.balance - item.price + income,
+        owned: [...p.owned, id],
+        incomeAt: Date.now(),
+      }));
+      return true;
+    },
+    [commit, pendingIncome],
+  );
+
+  const sellItem = useCallback(
+    (id: string) => {
+      const item = findItem(id);
+      if (!item || !stateRef.current.owned.includes(id)) return 0;
+      const amount = Math.floor(item.price * SELL_RATE);
+      const income = pendingIncome();
+      commit((p) => ({
+        ...p,
+        balance: p.balance + amount + income,
+        owned: p.owned.filter((o) => o !== id),
+        incomeAt: Date.now(),
+      }));
+      return amount;
+    },
+    [commit, pendingIncome],
+  );
+
+  const buyPickaxe = useCallback(
+    (level: number) => {
+      const pick = PICKAXES[level];
+      const s = stateRef.current;
+      if (!pick || level !== s.pickaxe + 1 || s.balance < pick.price) return false;
+      commit((p) => ({ ...p, balance: p.balance - pick.price, pickaxe: level }));
+      return true;
+    },
+    [commit],
+  );
+
+  const claimAchievement = useCallback(
+    (id: string) => {
+      const a = ACHIEVEMENTS.find((x) => x.id === id);
+      const s = stateRef.current;
+      if (!a || s.achievements.includes(id) || !a.done(s)) return 0;
+      commit((p) => ({ ...p, balance: p.balance + a.reward, achievements: [...p.achievements, id] }));
+      return a.reward;
+    },
+    [commit],
+  );
+
+  const placeSportBet = useCallback(
+    (picks: SportPick[], stake: number) => {
+      if (!picks.length || stake <= 0 || stateRef.current.balance < stake) return false;
+      const odds = Math.round(picks.reduce((x, p) => x * p.odds, 1) * 100) / 100;
+      const bet: SportBet = {
+        id: `${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+        picks,
+        stake,
+        odds,
+        placedAt: Date.now(),
+        status: 'open',
+        payout: 0,
+      };
+      commit((p) => ({
+        ...p,
+        balance: p.balance - stake,
+        xp: p.xp + stake,
+        bets: p.bets + 1,
+        totalBet: p.totalBet + stake,
+        sportBets: [bet, ...p.sportBets].slice(0, 50),
+      }));
+      return true;
+    },
+    [commit],
+  );
+
+  // Розрахунок ставок на спорт, коли матчі завершились.
+  useEffect(() => {
+    if (!loaded) return;
+    const settle = () => {
+      const s = stateRef.current;
+      if (!s.sportBets.some((b) => b.status === 'open' && betResult(b) !== 'open')) return;
+      let won = 0;
+      let wins = 0;
+      commit((p) => ({
+        ...p,
+        sportBets: p.sportBets.map((b) => {
+          if (b.status !== 'open') return b;
+          const r = betResult(b);
+          if (r === 'open') return b;
+          const payout = r === 'won' ? Math.floor(b.stake * b.odds) : 0;
+          won += payout;
+          if (payout) wins++;
+          return { ...b, status: r, payout };
+        }),
+      }));
+      if (won > 0) {
+        commit((p) => ({
+          ...p,
+          balance: p.balance + won,
+          totalWon: p.totalWon + won,
+          biggestWin: Math.max(p.biggestWin, won),
+          stats: { ...p.stats, sportWins: (p.stats.sportWins ?? 0) + wins },
+        }));
+        notify(`⚽ Ставка зіграла: +${formatCoins(won)}`);
+      } else notify('Ставка на спорт не зіграла');
+    };
+    settle();
+    const t = setInterval(settle, 5000);
+    return () => clearInterval(t);
+  }, [loaded, commit, notify]);
+
   const reset = useCallback(() => {
     const fresh = initialState();
     stateRef.current = fresh;
     setState(fresh);
-    notify('Прогрес скинуто. Тримай 5000 🪙');
+    notify(`Прогрес скинуто. Тримай ${formatCoins(START_BALANCE)}`);
   }, [notify]);
 
   return (
@@ -315,6 +497,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         claimMission,
         winJackpot,
         toggleFavorite,
+        spend,
+        credit,
+        track,
+        buyItem,
+        sellItem,
+        pendingIncome,
+        collectIncome,
+        buyPickaxe,
+        claimAchievement,
+        placeSportBet,
         openGame,
         reset,
       }}

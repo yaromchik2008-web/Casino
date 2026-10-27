@@ -12,7 +12,7 @@ import {
   WHEEL_COOLDOWN_MS,
   useWallet,
 } from '../state/WalletContext';
-import { colors, formatCoins } from '../theme';
+import { colors, formatCoins, formatShort } from '../theme';
 
 const WHEEL_PRIZES = [
   { amount: 200, weight: 30, color: '#2563EB' },
@@ -23,7 +23,7 @@ const WHEEL_PRIZES = [
   { amount: 10000, weight: 2.5, color: '#DC2626' },
   { amount: 25000, weight: 0.5, color: '#9333EA' },
 ];
-const WHEEL_ITEMS: StripItem[] = WHEEL_PRIZES.map((p) => ({ label: p.amount >= 1000 ? `${p.amount / 1000}K` : String(p.amount), color: p.color }));
+const WHEEL_ITEMS: StripItem[] = WHEEL_PRIZES.map((p) => ({ label: `${formatShort(p.amount)}₴`, color: p.color }));
 
 function pickPrize() {
   const total = WHEEL_PRIZES.reduce((a, p) => a + p.weight, 0);
@@ -35,7 +35,7 @@ function pickPrize() {
   return 0;
 }
 
-export function BonusesScreen() {
+export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => void }) {
   const wallet = useWallet();
   const s = wallet.state;
   const now = useNow();
@@ -63,13 +63,15 @@ export function BonusesScreen() {
       setWheelBusy(false);
       wallet.claimWheel(WHEEL_PRIZES[idx].amount);
       haptic('win');
-      wallet.notify(`Колесо фортуни: +${formatCoins(WHEEL_PRIZES[idx].amount)} 🪙`);
+      wallet.notify(`Колесо фортуни: +${formatCoins(WHEEL_PRIZES[idx].amount)}`);
     });
   };
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>🎁 Бонуси</Text>
+
+      <BigButton label="🏆 ТИЖНЕВИЙ ТУРНІР" color={colors.blue} onPress={onOpenTournaments} />
 
       <Panel style={styles.panel}>
         <LevelBar xp={s.xp} level={s.level} />
@@ -85,7 +87,7 @@ export function BonusesScreen() {
             return (
               <View key={i} style={[styles.day, done && styles.dayDone, isNext && styles.dayNext]}>
                 <Text style={styles.dayLabel}>День {i + 1}</Text>
-                <Text style={styles.dayValue}>{r >= 1000 ? `${r / 1000}K` : r}</Text>
+                <Text style={styles.dayValue}>{formatShort(r)}₴</Text>
                 <Text style={styles.dayIcon}>{done ? '✅' : i === 6 ? '👑' : '🪙'}</Text>
               </View>
             );
@@ -98,7 +100,7 @@ export function BonusesScreen() {
             const r = wallet.claimDaily();
             if (r) {
               haptic('win');
-              wallet.notify(`Щоденний бонус +${formatCoins(r)} 🪙`);
+              wallet.notify(`Щоденний бонус +${formatCoins(r)}`);
             }
           }}
         />
@@ -106,7 +108,7 @@ export function BonusesScreen() {
 
       <Panel style={styles.panel}>
         <Text style={styles.cardTitle}>🎡 Колесо фортуни</Text>
-        <Text style={styles.cardSub}>Безкоштовне обертання кожні 4 години. Приз до 25 000 🪙</Text>
+        <Text style={styles.cardSub}>Безкоштовне обертання кожні 4 години. Приз до 250 ₴</Text>
         <StripSpinner ref={spinner} items={WHEEL_ITEMS} />
         <BigButton
           label={wheelBusy ? '...' : wheelLeft > 0 ? `ЧЕРЕЗ ${formatDuration(wheelLeft)}` : 'КРУТИТИ БЕЗКОШТОВНО'}
@@ -119,14 +121,14 @@ export function BonusesScreen() {
       <View style={styles.twoCol}>
         <Panel style={styles.half}>
           <Text style={styles.cardTitle}>⏰ Щогодини</Text>
-          <Text style={styles.cardSub}>{HOURLY_BONUS} 🪙 кожну годину або одразу, якщо монети скінчились</Text>
+          <Text style={styles.cardSub}>{formatCoins(HOURLY_BONUS)} кожну годину або одразу, якщо гроші скінчились</Text>
           <BigButton
             label={hourlyReady ? 'ЗАБРАТИ' : formatDuration(hourlyLeft)}
             disabled={!hourlyReady}
             onPress={() => {
               if (wallet.claimHourly()) {
                 haptic('win');
-                wallet.notify(`+${HOURLY_BONUS} 🪙`);
+                wallet.notify(`+${formatCoins(HOURLY_BONUS)}`);
               }
             }}
             style={styles.smallBtn}
@@ -134,7 +136,7 @@ export function BonusesScreen() {
         </Panel>
         <Panel style={styles.half}>
           <Text style={styles.cardTitle}>💸 Кешбек 10%</Text>
-          <Text style={styles.cardSub}>Повертаємо 10% програних монет раз на день. Доступно: {formatCoins(cashback)} 🪙</Text>
+          <Text style={styles.cardSub}>Повертаємо 10% програних монет раз на день. Доступно: {formatCoins(cashback)}</Text>
           <BigButton
             label={cashbackReady ? 'ЗАБРАТИ' : s.lastCashbackDay === today ? 'ЗАВТРА' : 'НЕМАЄ'}
             disabled={!cashbackReady}
@@ -142,7 +144,7 @@ export function BonusesScreen() {
               const r = wallet.claimCashback();
               if (r) {
                 haptic('win');
-                wallet.notify(`Кешбек +${formatCoins(r)} 🪙`);
+                wallet.notify(`Кешбек +${formatCoins(r)}`);
               }
             }}
             color={colors.blue}
@@ -167,7 +169,7 @@ export function BonusesScreen() {
                   <View style={[styles.fill, { width: `${(progress / m.goal) * 100}%` }]} />
                 </View>
                 <Text style={styles.missionMeta}>
-                  {progress}/{m.goal} · нагорода {formatCoins(m.reward)} 🪙
+                  {progress}/{m.goal} · нагорода {formatCoins(m.reward)}
                 </Text>
               </View>
               <BigButton
@@ -177,7 +179,7 @@ export function BonusesScreen() {
                   const r = wallet.claimMission(m.id);
                   if (r) {
                     haptic('win');
-                    wallet.notify(`Завдання виконано: +${formatCoins(r)} 🪙`);
+                    wallet.notify(`Завдання виконано: +${formatCoins(r)}`);
                   }
                 }}
                 style={styles.missionBtn}

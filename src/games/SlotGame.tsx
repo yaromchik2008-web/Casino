@@ -1,60 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { sfx, useSettings } from '../audio/sound';
+import { celebrate, winTier } from '../components/Celebration';
+import { Reel } from '../components/Reel';
 import { BetSelector, BigButton, Chip, ResultLine, haptic } from '../components/ui';
+import { WinCounter } from '../components/WinCounter';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 import { Grid, ROWS, SlotConfig, evaluateGrid, paylines, randomSymbol, spinGrid } from './slotEngine';
 
-const REEL_BASE_MS = 600;
-const REEL_STEP_MS = 250;
-
-function Reel({
-  config,
-  column,
-  spinning,
-  size,
-  highlight,
-}: {
-  config: SlotConfig;
-  column: Grid[number];
-  spinning: boolean;
-  size: number;
-  highlight: boolean[];
-}) {
-  const [shown, setShown] = useState(column);
-  const bounce = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (spinning) {
-      const timer = setInterval(
-        () => setShown(Array.from({ length: ROWS }, () => randomSymbol(config))),
-        70,
-      );
-      return () => clearInterval(timer);
-    }
-    setShown(column);
-    bounce.setValue(-12);
-    Animated.spring(bounce, { toValue: 0, friction: 4, useNativeDriver: true }).start();
-  }, [spinning, column, config, bounce]);
-
-  return (
-    <Animated.View style={[styles.reel, { transform: [{ translateY: bounce }] }]}>
-      {shown.map((s, row) => (
-        <View
-          key={row}
-          style={[
-            styles.cell,
-            { width: size, height: size },
-            !spinning && highlight[row] && styles.cellWin,
-          ]}
-        >
-          <Text style={[{ fontSize: size * 0.55 }, spinning && styles.blur]}>{s.emoji}</Text>
-        </View>
-      ))}
-    </Animated.View>
-  );
-}
+const REEL_BASE_MS = 700;
+const REEL_STEP_MS = 260;
 
 export function SlotGame({ game }: { game: GameInfo }) {
   const config = game.slot!;
@@ -67,6 +24,10 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const [message, setMessage] = useState({ text: 'Удачі!', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const [freeSpins, setFreeSpins] = useState(0);
   const [auto, setAuto] = useState(0);
+  const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
+  const settings = useSettings();
+  const base = settings.fastSpin ? REEL_BASE_MS / 2 : REEL_BASE_MS;
+  const stepMs = settings.fastSpin ? REEL_STEP_MS / 2 : REEL_STEP_MS;
   const busy = spinning.some(Boolean);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -88,13 +49,15 @@ export function SlotGame({ game }: { game: GameInfo }) {
     setGrid(result);
     setHighlight([]);
     setSpinning(Array(config.reels).fill(true));
+    sfx('spin', 0.5);
     setMessage({ text: free ? `Фриспін! Залишилось ${freeSpins - 1}` : 'Крутимо...', tone: 'neutral' });
 
     for (let i = 0; i < config.reels; i++) {
       timers.current.push(
         setTimeout(() => {
           setSpinning((prev) => prev.map((v, idx) => (idx === i ? false : v)));
-        }, REEL_BASE_MS + i * REEL_STEP_MS),
+          sfx('stop', 0.5);
+        }, base + i * stepMs),
       );
     }
 
@@ -121,14 +84,22 @@ export function SlotGame({ game }: { game: GameInfo }) {
         if (outcome.jackpot) {
           const amount = wallet.winJackpot();
           parts.push(`💰 ДЖЕКПОТ ${formatCoins(amount)}!`);
+          celebrate({ kind: 'total', title: 'ДЖЕКПОТ!', amount, emoji: '💰' });
         }
         if (outcome.win > 0) {
           wallet.win(game.id, outcome.win);
-          parts.push(`+${formatCoins(outcome.win)} 🪙`);
+          parts.push(`+${formatCoins(outcome.win)}`);
+          setLastWin((w) => ({ amount: outcome.win, key: w.key + 1 }));
+          if (winTier(outcome.win, bet)) {
+            setAuto(0);
+            celebrate({ kind: 'win', amount: outcome.win, bet });
+          } else sfx('win');
         }
         if (outcome.freeSpins > 0) {
           setFreeSpins((n) => n + outcome.freeSpins);
+          wallet.track('bonuses');
           parts.push(`${outcome.freeSpins} фриспінів!`);
+          celebrate({ kind: 'intro', emoji: '🎁', title: 'ФРИСПІНИ!', subtitle: `${outcome.freeSpins} безкоштовних обертів` });
         }
         if (parts.length) {
           haptic('win');
@@ -136,7 +107,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
         } else {
           setMessage({ text: 'Ще раз?', tone: 'lose' });
         }
-      }, REEL_BASE_MS + (config.reels - 1) * REEL_STEP_MS + 60),
+      }, base + (config.reels - 1) * stepMs + 60),
     );
   };
 
@@ -158,7 +129,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
       {config.jackpotSymbol && (
         <View style={styles.jackpot}>
           <Text style={styles.jackpotLabel}>ПРОГРЕСИВНИЙ ДЖЕКПОТ</Text>
-          <Text style={styles.jackpotValue}>{formatCoins(wallet.state.jackpotPool)} 🪙</Text>
+          <Text style={styles.jackpotValue}>{formatCoins(wallet.state.jackpotPool)}</Text>
         </View>
       )}
       <View style={[styles.machine, { borderColor: game.colors[0] }]}>
@@ -166,16 +137,19 @@ export function SlotGame({ game }: { game: GameInfo }) {
           {grid.map((column, i) => (
             <Reel
               key={i}
-              config={config}
-              column={column}
+              items={column}
               spinning={spinning[i]}
               size={size}
-              highlight={highlight[i] ?? []}
+              win={highlight[i]}
+              randomItem={() => randomSymbol(config)}
+              speed={settings.fastSpin ? 160 : 240}
+              render={(s) => <Text style={{ fontSize: size * 0.55 }}>{s.emoji}</Text>}
             />
           ))}
         </View>
         {freeSpins > 0 && <Text style={styles.free}>Фриспіни: {freeSpins}</Text>}
       </View>
+      <WinCounter amount={lastWin.amount} countKey={lastWin.key} />
       <ResultLine text={message.text} tone={message.tone} />
       <BetSelector value={bet} onChange={setBet} disabled={busy || freeSpins > 0} />
       <BigButton

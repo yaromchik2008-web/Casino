@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LevelBar } from '../components/LevelBar';
 import { BigButton, Panel } from '../components/ui';
+import { SettingsPanel } from '../components/SettingsPanel';
 import { findGame } from '../games/catalog';
 import { levelName } from '../state/progress';
 import { useWallet } from '../state/WalletContext';
@@ -18,11 +19,11 @@ export function ProfileScreen({ onOpenGame }: { onOpenGame: (id: string) => void
     .filter((x) => x.game);
 
   const stats = [
-    { label: 'Баланс', value: `${formatCoins(s.balance)} 🪙` },
-    { label: 'Ставок зроблено', value: formatCoins(s.bets) },
+    { label: 'Баланс (ігрові ₴)', value: `${formatCoins(s.balance)}` },
+    { label: 'Ставок зроблено', value: s.bets.toLocaleString('uk-UA') },
     { label: 'Усього поставлено', value: formatCoins(s.totalBet) },
     { label: 'Усього виграно', value: formatCoins(s.totalWon) },
-    { label: 'Найбільший виграш', value: `${formatCoins(s.biggestWin)} 🪙` },
+    { label: 'Найбільший виграш', value: `${formatCoins(s.biggestWin)}` },
     { label: 'Серія щоденних входів', value: `${s.dailyStreak} дн.` },
   ];
 
@@ -58,12 +59,13 @@ export function ProfileScreen({ onOpenGame }: { onOpenGame: (id: string) => void
           ))}
         </Panel>
       )}
+      <SettingsPanel />
       <Panel style={styles.stats}>
         <Text style={styles.section}>Про застосунок</Text>
         <Text style={styles.about}>
-          FREE CASINO — це безкоштовна гра для розваги. Монети віртуальні: їх не можна купити, вивести чи обміняти на
-          реальні гроші або призи. Усі результати випадкові. Застосунок призначений для осіб від 18 років. Якщо азартні ігри
-          стають проблемою, звернись по допомогу на гарячу лінію підтримки у твоїй країні.
+          CASINO VICTOR — це безкоштовна гра для розваги. Гривні тут ігрові (₴): їх не можна купити, вивести чи обміняти
+          на реальні гроші або призи. Усі результати випадкові. Застосунок призначений для осіб від 18 років. Якщо азартні
+          ігри стають проблемою, звернись по допомогу на гарячу лінію підтримки у твоїй країні.
         </Text>
       </Panel>
       <BigButton

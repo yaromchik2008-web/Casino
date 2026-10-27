@@ -12,8 +12,8 @@ function odds(rank: number) {
   const higher = (14 - rank + 1) / 13;
   const lower = (rank - 2 + 1) / 13;
   return {
-    higher: Math.floor((0.97 / higher) * 100) / 100,
-    lower: Math.floor((0.97 / lower) * 100) / 100,
+    higher: Math.floor((0.94 / higher) * 100) / 100,
+    lower: Math.floor((0.94 / lower) * 100) / 100,
   };
 }
 
@@ -66,7 +66,7 @@ export function HiLoGame({ game }: { game: GameInfo }) {
     wallet.win(game.id, won);
     haptic('win');
     setActive(false);
-    setMessage({ text: `Забрав +${formatCoins(won)} 🪙`, tone: 'win' });
+    setMessage({ text: `Забрав +${formatCoins(won)}`, tone: 'win' });
     setMultiplier(1);
   };
 

@@ -46,7 +46,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'slot', title: 'Зіграй 20 обертів у слотах', goal: 20, reward: 400, icon: '🎰' },
   { id: 'table', title: 'Зіграй 5 настільних ігор', goal: 5, reward: 400, icon: '🃏' },
   { id: 'fast', title: 'Зіграй 10 швидких ігор', goal: 10, reward: 400, icon: '⚡' },
-  { id: 'bigwin', title: 'Виграй 1000+ за одну гру', goal: 1, reward: 1000, icon: '🏆' },
+  { id: 'bigwin', title: 'Виграй 10 ₴+ за одну гру', goal: 1, reward: 1000, icon: '🏆' },
   { id: 'variety', title: 'Спробуй 5 різних ігор', goal: 5, reward: 700, icon: '🧭' },
 ];
 

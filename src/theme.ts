@@ -12,8 +12,19 @@ export const colors = {
   blue: '#3B82F6',
 };
 
-export const BETS = [10, 25, 50, 100, 250, 500];
+// Усі суми зберігаються в копійках ігрових гривень: 15 = 0,15 ₴.
+export const MIN_BET = 15;
+export const MAX_BET = 100000;
+export const BETS = [15, 50, 100, 200, 500, 1000, 2000, 5000];
+export const CURRENCY = '₴';
 
 export function formatCoins(n: number): string {
-  return Math.floor(n).toLocaleString('uk-UA');
+  const v = Math.round(n) / 100;
+  return `${v.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${CURRENCY}`;
+}
+
+/** Коротко для фішок і кнопок: 0.15, 1, 2.5, 50. */
+export function formatShort(n: number): string {
+  const v = Math.round(n) / 100;
+  return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0$/, '');
 }

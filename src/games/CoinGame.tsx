@@ -5,7 +5,7 @@ import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 
-const PAYOUT = 1.95;
+const PAYOUT = 1.88;
 
 export function CoinGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
@@ -33,7 +33,7 @@ export function CoinGame({ game }: { game: GameInfo }) {
         wallet.win(game.id, won);
         haptic('win');
         setStreak((s) => s + 1);
-        setMessage({ text: `${result === 'heads' ? 'Орел' : 'Решка'}! +${formatCoins(won)} 🪙`, tone: 'win' });
+        setMessage({ text: `${result === 'heads' ? 'Орел' : 'Решка'}! +${formatCoins(won)}`, tone: 'win' });
       } else {
         setStreak(0);
         setMessage({ text: `${result === 'heads' ? 'Орел' : 'Решка'}. Не вгадав`, tone: 'lose' });

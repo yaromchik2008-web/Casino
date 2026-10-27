@@ -15,7 +15,7 @@ export function DiceGame({ game }: { game: GameInfo }) {
   const [message, setMessage] = useState({ text: 'Обери поріг і кидай', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
 
   const chance = over ? 99 - target : target;
-  const multiplier = Math.floor((97 / chance) * 100) / 100;
+  const multiplier = Math.floor((94 / chance) * 100) / 100;
 
   const adjust = (d: number) => setTarget((t) => Math.max(2, Math.min(97, t + d)));
 
@@ -39,7 +39,7 @@ export function DiceGame({ game }: { game: GameInfo }) {
           const amount = Math.floor(bet * multiplier);
           wallet.win(game.id, amount);
           haptic('win');
-          setMessage({ text: `Випало ${result}! +${formatCoins(amount)} 🪙`, tone: 'win' });
+          setMessage({ text: `Випало ${result}! +${formatCoins(amount)}`, tone: 'win' });
         } else {
           setMessage({ text: `Випало ${result}. Мимо`, tone: 'lose' });
         }

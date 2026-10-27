@@ -71,7 +71,7 @@ export function BaccaratGame({ game }: { game: GameInfo }) {
       const won = Math.floor(bet * PAYOUTS[side]);
       wallet.win(game.id, won);
       haptic('win');
-      setMessage({ text: `${LABELS[r.winner]} виграє! +${formatCoins(won)} 🪙`, tone: 'win' });
+      setMessage({ text: `${LABELS[r.winner]} виграє! +${formatCoins(won)}`, tone: 'win' });
     } else if (r.winner === 'tie') {
       wallet.win(game.id, bet);
       setMessage({ text: 'Нічия. Ставку повернуто', tone: 'neutral' });

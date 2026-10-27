@@ -16,7 +16,7 @@ export function LevelBar({ xp, level }: { xp: number; level: number }) {
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${Math.max(2, pct * 100)}%` }]} />
       </View>
-      {!max && <Text style={styles.hint}>Наступний рівень: {levelName(level + 1)} і {formatCoins(1000 * (level + 1))} 🪙. 1 XP за кожну поставлену монету</Text>}
+      {!max && <Text style={styles.hint}>Наступний рівень: {levelName(level + 1)} і {formatCoins(1000 * (level + 1))}. 1 XP за кожну поставлену копійку</Text>}
     </View>
   );
 }

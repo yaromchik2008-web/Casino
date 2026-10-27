@@ -7,7 +7,7 @@ import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 
 const SEGMENTS = [
-  { mult: 0, weight: 583, color: '#374151' },
+  { mult: 0, weight: 613, color: '#374151' },
   { mult: 1.2, weight: 140, color: '#2563EB' },
   { mult: 1.5, weight: 110, color: '#0D9488' },
   { mult: 2, weight: 80, color: '#16A34A' },
@@ -52,7 +52,7 @@ export function WheelGame({ game }: { game: GameInfo }) {
         const won = Math.floor(bet * mult);
         wallet.win(game.id, won);
         haptic('win');
-        setMessage({ text: `×${mult}! +${formatCoins(won)} 🪙`, tone: 'win' });
+        setMessage({ text: `×${mult}! +${formatCoins(won)}`, tone: 'win' });
       } else {
         setMessage({ text: 'Порожньо. Ще раз?', tone: 'lose' });
       }

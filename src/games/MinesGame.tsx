@@ -12,7 +12,7 @@ const MINE_OPTIONS = [1, 3, 5, 10];
 export function minesMultiplier(mines: number, opened: number): number {
   let p = 1;
   for (let i = 0; i < opened; i++) p *= (SIZE - mines - i) / (SIZE - i);
-  return opened === 0 ? 1 : Math.floor((0.97 / p) * 100) / 100;
+  return opened === 0 ? 1 : Math.floor((0.94 / p) * 100) / 100;
 }
 
 export function MinesGame({ game }: { game: GameInfo }) {
@@ -71,7 +71,7 @@ export function MinesGame({ game }: { game: GameInfo }) {
     haptic('win');
     setActive(false);
     setOpened(Array(SIZE).fill(true));
-    setMessage({ text: `Забрав ×${multiplier}: +${formatCoins(won)} 🪙`, tone: 'win' });
+    setMessage({ text: `Забрав ×${multiplier}: +${formatCoins(won)}`, tone: 'win' });
   };
 
   return (

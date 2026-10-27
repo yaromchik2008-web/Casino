@@ -20,7 +20,7 @@ export function TournamentsScreen() {
       <Text style={styles.title}>🏆 Турніри</Text>
       <LinearGradient colors={['#0EA5E9', '#4C1D95']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <Text style={styles.heroTitle}>Тижневий турнір «Зоряний марафон»</Text>
-        <Text style={styles.heroPool}>{formatCoins(pool)} 🪙</Text>
+        <Text style={styles.heroPool}>{formatCoins(pool)}</Text>
         <Text style={styles.heroSub}>Очки = монети, виграні в будь-якій грі цього тижня</Text>
         <Text style={styles.heroTimer}>До кінця: {formatDuration(weekEndsAt(new Date(now)) - now)}</Text>
       </LinearGradient>
@@ -29,7 +29,7 @@ export function TournamentsScreen() {
         <Text style={styles.meText}>Твоє місце: {points > 0 ? `#${myPlace}` : '—'}</Text>
         <Text style={styles.meText}>Очки: {formatCoins(points)}</Text>
         {points > 0 && myPlace <= TOURNAMENT_PRIZES.length && (
-          <Text style={styles.mePrize}>Зараз ти отримуєш {formatCoins(TOURNAMENT_PRIZES[myPlace - 1])} 🪙</Text>
+          <Text style={styles.mePrize}>Зараз ти отримуєш {formatCoins(TOURNAMENT_PRIZES[myPlace - 1])}</Text>
         )}
       </Panel>
 

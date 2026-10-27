@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Free Casino",
+    "name": "Casino Victor",
     "slug": "freecasino",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -27,7 +27,7 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "Free Casino"
+      "name": "Casino Victor"
     },
     "backgroundColor": "#0D0A23",
     "plugins": [
@@ -38,7 +38,8 @@
           "imageWidth": 240,
           "backgroundColor": "#0D0A23"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "baseUrl": "/Casino"

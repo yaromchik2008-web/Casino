@@ -66,7 +66,7 @@ export function BlackjackGame({ game }: { game: GameInfo }) {
     } else text = `Дилер виграв ${dt} проти ${pt}`;
     if (payout > 0) wallet.win(game.id, payout);
     if (payout > currentStake) haptic('win');
-    setMessage({ text: payout > currentStake ? `${text} +${formatCoins(payout)} 🪙` : text, tone: payout > currentStake ? 'win' : payout ? 'neutral' : 'lose' });
+    setMessage({ text: payout > currentStake ? `${text} +${formatCoins(payout)}` : text, tone: payout > currentStake ? 'win' : payout ? 'neutral' : 'lose' });
   };
 
   const deal = () => {
@@ -94,7 +94,7 @@ export function BlackjackGame({ game }: { game: GameInfo }) {
       } else {
         wallet.win(game.id, bet * 2.5);
         haptic('win');
-        setMessage({ text: `БЛЕКДЖЕК! +${formatCoins(bet * 2.5)} 🪙`, tone: 'win' });
+        setMessage({ text: `БЛЕКДЖЕК! +${formatCoins(bet * 2.5)}`, tone: 'win' });
       }
       return;
     }

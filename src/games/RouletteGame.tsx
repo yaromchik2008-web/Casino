@@ -81,7 +81,7 @@ export function RouletteGame({ game }: { game: GameInfo }) {
         if (won > 0) {
           wallet.win(game.id, won);
           haptic('win');
-          setMessage({ text: `Випало ${result}. Виграш +${formatCoins(won)} 🪙`, tone: 'win' });
+          setMessage({ text: `Випало ${result}. Виграш +${formatCoins(won)}`, tone: 'win' });
         } else {
           setMessage({ text: `Випало ${result}. Не цього разу`, tone: 'lose' });
         }
@@ -130,7 +130,7 @@ export function RouletteGame({ game }: { game: GameInfo }) {
         ))}
       </View>
 
-      <Text style={styles.total}>Фішка: {chip} · Усього на столі: {formatCoins(total)} 🪙</Text>
+      <Text style={styles.total}>Фішка: {chip} · Усього на столі: {formatCoins(total)}</Text>
       <BetSelector value={chip} onChange={setChip} disabled={spinning} />
       <View style={styles.row}>
         <Chip label="Очистити" onPress={() => setBets({})} disabled={spinning || total === 0} />

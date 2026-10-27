@@ -1,4 +1,5 @@
-import { ComponentType } from 'react';
+import { ComponentType, useEffect } from 'react';
+import { playMusic } from '../audio/sound';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BaccaratGame } from '../games/BaccaratGame';
 import { BlackjackGame } from '../games/BlackjackGame';
@@ -7,11 +8,14 @@ import { CoinGame } from '../games/CoinGame';
 import { CrashGame } from '../games/CrashGame';
 import { DiceGame } from '../games/DiceGame';
 import { HiLoGame } from '../games/HiLoGame';
+import { HoldWinGame } from '../games/HoldWinGame';
+import { MineGame } from '../games/MineGame';
 import { MinesGame } from '../games/MinesGame';
 import { PlinkoGame } from '../games/PlinkoGame';
 import { PokerGame } from '../games/PokerGame';
 import { RouletteGame } from '../games/RouletteGame';
 import { SlotGame } from '../games/SlotGame';
+import { TumbleGame } from '../games/TumbleGame';
 import { WheelGame } from '../games/WheelGame';
 import { useWallet } from '../state/WalletContext';
 import { colors } from '../theme';
@@ -29,12 +33,19 @@ const COMPONENTS: Record<GameKind, ComponentType<{ game: GameInfo }>> = {
   hilo: HiLoGame,
   wheel: WheelGame,
   coin: CoinGame,
+  tumble: TumbleGame,
+  holdwin: HoldWinGame,
+  dig: MineGame,
 };
 
 export function GameScreen({ game, onClose }: { game: GameInfo; onClose: () => void }) {
   const wallet = useWallet();
   const Game = COMPONENTS[game.kind];
   const favorite = wallet.state.favorites.includes(game.id);
+  useEffect(() => {
+    playMusic(game.music);
+    return () => playMusic('lobby');
+  }, [game.music]);
   return (
     <View style={styles.root}>
       <View style={styles.bar}>

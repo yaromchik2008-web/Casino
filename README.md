@@ -1,4 +1,4 @@
-# Free Casino 🎰
+# Casino Victor 🎰
 
 Безкоштовне соціальне казино для розваги на Android та iOS (Expo / React Native).
 Лише віртуальні монети: без реальних грошей, без покупок, без виведення.
@@ -43,3 +43,11 @@ eas build --platform ios       # потрібен акаунт Apple Developer
 ```
 Google Play і App Store мають окремі правила для «соціальних казино»: вікове обмеження 18+
 і позначка про імітацію азартних ігор.
+
+## Друзі (Supabase)
+
+1. Створи проєкт на supabase.com.
+2. SQL Editor → New query → встав `docs/supabase.sql` → Run.
+3. Authentication → Sign In / Providers → увімкни Anonymous sign-ins.
+4. Project Settings → API: скопіюй Project URL і ключ `anon public` у `src/config.ts`.
+   Ключ `service_role` у застосунок не вставляй ніколи.

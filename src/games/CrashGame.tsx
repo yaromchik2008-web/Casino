@@ -9,7 +9,7 @@ const AUTO_OPTIONS = [0, 1.5, 2, 3, 5, 10];
 
 function crashPoint() {
   const u = Math.random();
-  return Math.max(1, Math.floor((0.97 / (1 - u)) * 100) / 100);
+  return Math.max(1, Math.floor((0.94 / (1 - u)) * 100) / 100);
 }
 
 export function CrashGame({ game }: { game: GameInfo }) {
@@ -35,7 +35,7 @@ export function CrashGame({ game }: { game: GameInfo }) {
     wallet.win(game.id, won);
     haptic('win');
     setCashedAt(at);
-    setMessage({ text: `Забрав на ×${at.toFixed(2)}: +${formatCoins(won)} 🪙`, tone: 'win' });
+    setMessage({ text: `Забрав на ×${at.toFixed(2)}: +${formatCoins(won)}`, tone: 'win' });
   };
 
   const launch = () => {
