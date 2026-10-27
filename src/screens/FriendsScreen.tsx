@@ -125,7 +125,7 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
             placeholderTextColor={colors.muted}
             style={[styles.input, styles.flex]}
           />
-          <BigButton label="НАДІСЛАТИ ₴" style={styles.smallBtn} onPress={give} />
+          <BigButton label="НАДІСЛАТИ ₴" style={styles.wideBtn} onPress={give} />
         </View>
       )}
       <View style={[styles.sendRow, styles.pad]}>
@@ -298,6 +298,7 @@ const styles = StyleSheet.create({
   addPanel: { gap: 8 },
   sendRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 0 },
   input: {
+    minWidth: 0,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
@@ -308,7 +309,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   pad: { paddingHorizontal: 12, paddingBottom: 8 },
-  smallBtn: { width: 'auto', paddingHorizontal: 16, paddingVertical: 10 },
+  smallBtn: { width: 120, paddingHorizontal: 8, paddingVertical: 10 },
+  wideBtn: { width: 170, paddingHorizontal: 8, paddingVertical: 10 },
   sendBtn: { width: 52, paddingVertical: 10 },
   error: { color: colors.red, fontWeight: '700', textAlign: 'center' },
   empty: { color: colors.muted, textAlign: 'center', marginVertical: 12 },

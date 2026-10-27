@@ -50,6 +50,7 @@ export function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
   for (const k of Object.keys(ERRORS)) if (msg.includes(k)) return ERRORS[k];
   if (msg.toLowerCase().includes('anonymous')) return 'На сервері не ввімкнено анонімний вхід';
+  if (msg.includes('schema cache') || msg.includes('does not exist')) return 'На сервері ще не запущено SQL з docs/supabase.sql';
   return 'Немає зв’язку з сервером. Спробуй пізніше';
 }
 
