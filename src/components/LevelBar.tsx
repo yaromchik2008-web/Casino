@@ -11,12 +11,12 @@ export function LevelBar({ xp, level }: { xp: number; level: number }) {
     <View style={styles.root}>
       <View style={styles.header}>
         <Text style={styles.level}>⭐ Рівень {level}: {levelName(level)}</Text>
-        {!max && <Text style={styles.xp}>{formatCoins(xp)} / {formatCoins(to)} XP</Text>}
+        {!max && <Text style={styles.xp}>{Math.floor(xp).toLocaleString('uk-UA')} / {to.toLocaleString('uk-UA')} XP</Text>}
       </View>
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${Math.max(2, pct * 100)}%` }]} />
       </View>
-      {!max && <Text style={styles.hint}>Наступний рівень: {levelName(level + 1)} і {formatCoins(1000 * (level + 1))}. 1 XP за кожну поставлену копійку</Text>}
+      {!max && <Text style={styles.hint}>Наступний рівень: {levelName(level + 1)} і {formatCoins(1000 * (level + 1))}. 1 XP за кожні 10 копійок ставки</Text>}
     </View>
   );
 }

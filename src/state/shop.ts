@@ -1,6 +1,6 @@
 // Майно за ігрові гривні. Суми в копійках. Назви загальні, без брендів.
 
-export type ItemCategory = 'phone' | 'car' | 'home' | 'business';
+export type ItemCategory = 'phone' | 'car' | 'moto' | 'home' | 'business';
 
 export interface ShopItem {
   id: string;
@@ -15,7 +15,8 @@ const UAH = 100;
 
 export const SHOP_CATEGORIES: { id: ItemCategory; label: string; icon: string }[] = [
   { id: 'home', label: 'Житло', icon: '🏠' },
-  { id: 'car', label: 'Транспорт', icon: '🚗' },
+  { id: 'car', label: 'Машини', icon: '🚗' },
+  { id: 'moto', label: 'Мотоцикли', icon: '🏍️' },
   { id: 'phone', label: 'Телефони', icon: '📱' },
   { id: 'business', label: 'Бізнес', icon: '🏢' },
 ];
@@ -26,12 +27,18 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'phone-pro', title: 'Флагманський смартфон', emoji: '📲', category: 'phone', price: 2500 * UAH },
   { id: 'phone-fold', title: 'Складаний смартфон', emoji: '🤳', category: 'phone', price: 6000 * UAH },
 
-  { id: 'car-bike', title: 'Велосипед', emoji: '🚲', category: 'car', price: 300 * UAH },
-  { id: 'car-scooter', title: 'Скутер', emoji: '🛵', category: 'car', price: 1500 * UAH },
+  { id: 'car-bike', title: 'Велосипед', emoji: '🚲', category: 'moto', price: 300 * UAH },
+  { id: 'car-scooter', title: 'Скутер', emoji: '🛵', category: 'moto', price: 1500 * UAH },
+  { id: 'moto-alpha', title: 'Мопед Альфа 110 кубів', emoji: '🛵', category: 'moto', price: 18000 * UAH },
+  { id: 'moto-prus', title: 'Прус', emoji: '🏍️', category: 'moto', price: 25000 * UAH },
+  { id: 'moto-forte', title: 'Forte 200 кубів', emoji: '🏍️', category: 'moto', price: 42000 * UAH },
   { id: 'car-old', title: 'Вживана легківка', emoji: '🚗', category: 'car', price: 8000 * UAH },
-  { id: 'car-suv', title: 'Кросовер', emoji: '🚙', category: 'car', price: 40000 * UAH },
-  { id: 'car-sport', title: 'Спорткар', emoji: '🏎️', category: 'car', price: 150000 * UAH },
-  { id: 'car-yacht', title: 'Яхта', emoji: '🛥️', category: 'car', price: 400000 * UAH },
+  { id: 'car-vaz', title: 'ВАЗ 2107', emoji: '🚗', category: 'car', price: 35000 * UAH },
+  { id: 'car-doblo', title: 'Fiat Doblo', emoji: '🚐', category: 'car', price: 220000 * UAH },
+  { id: 'car-megane', title: 'Renault Megane', emoji: '🚘', category: 'car', price: 280000 * UAH },
+  { id: 'car-suv', title: 'Кросовер', emoji: '🚙', category: 'car', price: 450000 * UAH },
+  { id: 'car-sport', title: 'Спорткар', emoji: '🏎️', category: 'car', price: 1500000 * UAH },
+  { id: 'car-yacht', title: 'Яхта', emoji: '🛥️', category: 'car', price: 3000000 * UAH },
 
   { id: 'home-room', title: 'Кімната в гуртожитку', emoji: '🛏️', category: 'home', price: 1000 * UAH },
   { id: 'home-flat', title: 'Квартира', emoji: '🏢', category: 'home', price: 20000 * UAH },

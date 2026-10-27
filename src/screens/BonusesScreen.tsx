@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { sfx } from '../audio/sound';
 import { LevelBar } from '../components/LevelBar';
 import { StripItem, StripSpinner, StripSpinnerHandle } from '../components/StripSpinner';
 import { BigButton, Panel, haptic } from '../components/ui';
@@ -41,6 +42,8 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
   const now = useNow();
   const spinner = useRef<StripSpinnerHandle>(null);
   const [wheelBusy, setWheelBusy] = useState(false);
+  const [promo, setPromo] = useState('');
+  const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const today = dayId();
   const dailyClaimed = s.lastDailyDay === today;
@@ -72,6 +75,38 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
       <Text style={styles.title}>🎁 Бонуси</Text>
 
       <BigButton label="🏆 ТИЖНЕВИЙ ТУРНІР" color={colors.blue} onPress={onOpenTournaments} />
+
+      <Panel style={styles.panel}>
+        <Text style={styles.cardTitle}>🎟️ Промокод</Text>
+        <View style={styles.promoRow}>
+          <TextInput
+            value={promo}
+            onChangeText={setPromo}
+            placeholder="Введи промокод"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.promoInput}
+          />
+          <BigButton
+            label="ОК"
+            style={styles.promoBtn}
+            disabled={!promo.trim()}
+            onPress={() => {
+              const r = wallet.redeemPromo(promo);
+              if (r === 'invalid') setPromoMsg({ text: 'Такого промокоду немає', ok: false });
+              else if (r === 'used') setPromoMsg({ text: 'Цей промокод ти вже використав', ok: false });
+              else {
+                sfx('cash');
+                setPromo('');
+                setPromoMsg({ text: `Нараховано ${formatCoins(r)}!`, ok: true });
+                wallet.notify(`🎟️ Промокод: +${formatCoins(r)}`);
+              }
+            }}
+          />
+        </View>
+        {promoMsg && <Text style={[styles.promoMsg, { color: promoMsg.ok ? colors.green : colors.red }]}>{promoMsg.text}</Text>}
+      </Panel>
 
       <Panel style={styles.panel}>
         <LevelBar xp={s.xp} level={s.level} />
@@ -193,6 +228,21 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
 }
 
 const styles = StyleSheet.create({
+  promoRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  promoInput: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    color: colors.text,
+    fontSize: 15,
+    backgroundColor: colors.bg,
+  },
+  promoBtn: { width: 80, paddingVertical: 10 },
+  promoMsg: { fontWeight: '700', marginTop: 6, textAlign: 'center' },
   content: { padding: 16, paddingBottom: 32, gap: 14 },
   title: { color: colors.text, fontSize: 26, fontWeight: '900' },
   panel: { gap: 10 },

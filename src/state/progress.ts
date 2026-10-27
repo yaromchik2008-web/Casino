@@ -13,8 +13,11 @@ export const LEVELS = [
   'Космічна легенда',
 ];
 
+// 1 XP за кожні 10 копійок ставки. Рівень 2 ≈ 100 ₴ ставок, рівень 5 ≈ 1 400 ₴, рівень 10 ≈ 6 500 ₴.
+export const XP_PER_KOPECKS = 10;
+
 export function xpForLevel(level: number): number {
-  return Math.round(2000 * Math.pow(level - 1, 1.6));
+  return Math.round(1000 * Math.pow(level - 1, 1.9));
 }
 
 export function levelFromXp(xp: number): number {

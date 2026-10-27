@@ -22,7 +22,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'jackpot', title: 'Перший джекпот', icon: '💰', reward: 50 * UAH, done: (s) => (s.stats.jackpots ?? 0) >= 1 },
   { id: 'level5', title: 'Рівень 5', icon: '⭐', reward: 50 * UAH, done: (s) => s.level >= 5 },
   { id: 'item', title: 'Перша покупка', icon: '🛍️', reward: 10 * UAH, done: (s) => s.owned.length >= 1 },
-  { id: 'car', title: 'Свій транспорт', icon: '🚗', reward: 30 * UAH, done: (s) => owns(s, 'car') },
+  { id: 'car', title: 'Свій транспорт', icon: '🚗', reward: 30 * UAH, done: (s) => owns(s, 'car') || owns(s, 'moto') },
   { id: 'home', title: 'Своє житло', icon: '🏠', reward: 50 * UAH, done: (s) => owns(s, 'home') },
   { id: 'biz', title: 'Власний бізнес', icon: '🏢', reward: 50 * UAH, done: (s) => owns(s, 'business') },
   { id: 'sport', title: 'Виграна ставка на спорт', icon: '⚽', reward: 15 * UAH, done: (s) => (s.stats.sportWins ?? 0) >= 1 },

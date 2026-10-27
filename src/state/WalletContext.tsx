@@ -10,6 +10,7 @@ import {
   levelName,
   levelReward,
   weekId,
+  XP_PER_KOPECKS,
 } from './progress';
 import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
@@ -25,6 +26,8 @@ export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
+// Промокоди: кожен можна використати один раз. Суми в копійках.
+const PROMO_CODES: Record<string, number> = { sosunok: 100000 };
 
 export interface PlayerState {
   balance: number;
@@ -56,6 +59,8 @@ export interface PlayerState {
   stats: Record<string, number>;
   achievements: string[];
   sportBets: SportBet[];
+  promoUsed: string[];
+  xpV: number;
 }
 
 function initialState(): PlayerState {
@@ -89,6 +94,8 @@ function initialState(): PlayerState {
     stats: {},
     achievements: [],
     sportBets: [],
+    promoUsed: [],
+    xpV: 2,
   };
 }
 
@@ -139,6 +146,7 @@ interface WalletApi {
   buyPickaxe: (level: number) => boolean;
   claimAchievement: (id: string) => number;
   placeSportBet: (picks: SportPick[], stake: number) => boolean;
+  redeemPromo: (code: string) => number | 'used' | 'invalid';
   openGame: (gameId: string) => void;
   reset: () => void;
 }
@@ -183,7 +191,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .then((raw) => {
         if (raw) {
           const notes: string[] = [];
-          const restored = rollPeriods({ ...initialState(), ...JSON.parse(raw) }, notes);
+          const saved = JSON.parse(raw);
+          // Старі збереження рахували 1 XP за копійку: переводимо на нову, повільнішу шкалу.
+          if (!saved.xpV) saved.xp = Math.round((saved.xp ?? 0) / XP_PER_KOPECKS);
+          const restored = rollPeriods({ ...initialState(), ...saved, xpV: 2 }, notes);
           stateRef.current = restored;
           setState(restored);
           if (notes.length) notify(notes.join('\n'));
@@ -209,7 +220,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return {
           ...s,
           balance: s.balance - amount,
-          xp: s.xp + amount,
+          xp: s.xp + amount / XP_PER_KOPECKS,
           bets: s.bets + 1,
           totalBet: s.totalBet + amount,
           played: { ...s.played, [gameId]: (s.played[gameId] ?? 0) + 1 },
@@ -428,7 +439,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       commit((p) => ({
         ...p,
         balance: p.balance - stake,
-        xp: p.xp + stake,
+        xp: p.xp + stake / XP_PER_KOPECKS,
         bets: p.bets + 1,
         totalBet: p.totalBet + stake,
         sportBets: [bet, ...p.sportBets].slice(0, 50),
@@ -474,6 +485,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [loaded, commit, notify]);
 
+  const redeemPromo = useCallback(
+    (raw: string) => {
+      const code = raw.trim().toLowerCase();
+      const amount = PROMO_CODES[code];
+      if (!amount) return 'invalid' as const;
+      if (stateRef.current.promoUsed.includes(code)) return 'used' as const;
+      commit((p) => ({ ...p, balance: p.balance + amount, promoUsed: [...p.promoUsed, code] }));
+      return amount;
+    },
+    [commit],
+  );
+
   const reset = useCallback(() => {
     const fresh = initialState();
     stateRef.current = fresh;
@@ -507,6 +530,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         buyPickaxe,
         claimAchievement,
         placeSportBet,
+        redeemPromo,
         openGame,
         reset,
       }}
