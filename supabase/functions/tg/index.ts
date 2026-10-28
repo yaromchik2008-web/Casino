@@ -22,10 +22,14 @@ const cors = {
 
 // Пакети ігрових ₴ за Telegram Stars (той самий список у src/state/stars.ts).
 const PACKS: Record<string, { stars: number; amount: number; title: string }> = {
+  s5: { stars: 5, amount: 50_000, title: '500 ігрових ₴' },
   s15: { stars: 15, amount: 150_000, title: '1 500 ігрових ₴' },
+  s25: { stars: 25, amount: 250_000, title: '2 500 ігрових ₴' },
   s50: { stars: 50, amount: 550_000, title: '5 500 ігрових ₴' },
-  s150: { stars: 150, amount: 1_800_000, title: '18 000 ігрових ₴' },
+  s100: { stars: 100, amount: 1_150_000, title: '11 500 ігрових ₴' },
+  s250: { stars: 250, amount: 3_000_000, title: '30 000 ігрових ₴' },
   s500: { stars: 500, amount: 6_500_000, title: '65 000 ігрових ₴' },
+  s1000: { stars: 1000, amount: 14_000_000, title: '140 000 ігрових ₴' },
 };
 
 async function tgApi(method: string, payload: unknown) {
