@@ -22,6 +22,7 @@ import {
 } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
 import { DuelList, DuelPlay, DuelSetup } from './Duels';
+import { PlayerProfile } from './PlayerProfile';
 import { telegramName } from '../telegram';
 import { colors, formatCoins } from '../theme';
 
@@ -43,6 +44,7 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
   const [showDuel, setShowDuel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
 
   const refresh = useCallback(() => {
@@ -95,12 +97,13 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
         <Pressable onPress={onBack} hitSlop={10}>
           <Text style={styles.back}>‹ Друзі</Text>
         </Pressable>
-        <View style={styles.flex}>
-          <Text style={styles.chatName}>{friend.name}</Text>
+        {showProfile && <PlayerProfile id={friend.id} name={friend.name} onClose={() => setShowProfile(false)} />}
+        <Pressable style={styles.flex} onPress={() => setShowProfile(true)}>
+          <Text style={styles.chatName}>{friend.name} 👤</Text>
           <Text style={styles.muted}>
             {friend.status} · ⭐ {friend.level} · {formatCoins(friend.balance)} · {seen(friend.updated_at)}
           </Text>
-        </View>
+        </Pressable>
       </View>
       <ScrollView
         ref={scroll}
@@ -193,6 +196,7 @@ export function FriendsScreen() {
   const [duels, setDuels] = useState<Duel[]>([]);
   const [playing, setPlaying] = useState<Duel | null>(null);
   const autoOpened = useRef(new Set<number>());
+  const [profileOf, setProfileOf] = useState<Profile | null>(null);
 
   const refresh = useCallback(() => {
     listFriends()
@@ -330,6 +334,7 @@ export function FriendsScreen() {
         {error && <Text style={styles.error}>{error}</Text>}
       </Panel>
 
+      {profileOf && <PlayerProfile id={profileOf.id} name={profileOf.name} onClose={() => setProfileOf(null)} />}
       <DuelList duels={duels} friends={friends} onPlay={setPlaying} onChanged={refreshDuels} onError={setError} />
 
       <Text style={styles.title}>Друзі ({friends.length})</Text>
@@ -346,7 +351,12 @@ export function FriendsScreen() {
             </View>
             <View style={styles.right}>
               <Text style={styles.balance}>{formatCoins(f.balance)}</Text>
-              <Text style={styles.muted}>💬 написати</Text>
+              <View style={styles.actions}>
+                <Pressable hitSlop={8} onPress={() => setProfileOf(f)}>
+                  <Text style={styles.link}>👤 профіль</Text>
+                </Pressable>
+                <Text style={styles.muted}>💬</Text>
+              </View>
             </View>
           </Panel>
         </Pressable>
@@ -385,7 +395,9 @@ const styles = StyleSheet.create({
   friend: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rank: { color: colors.gold, fontWeight: '900', fontSize: 18, width: 24, textAlign: 'center' },
   friendName: { color: colors.text, fontWeight: '800', fontSize: 15 },
-  right: { alignItems: 'flex-end' },
+  right: { alignItems: 'flex-end', gap: 2 },
+  actions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  link: { color: colors.gold, fontSize: 12, fontWeight: '800' },
   balance: { color: colors.gold, fontWeight: '900' },
   chatHead: {
     flexDirection: 'row',

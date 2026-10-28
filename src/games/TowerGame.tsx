@@ -72,15 +72,24 @@ export function TowerGame({ game }: { game: GameInfo }) {
     setMessage({ text: `Є! Зараз ${formatCoins(prize(next))}, далі ${formatCoins(prize(next + 1))}`, tone: 'win' });
   };
 
+  const lost = !active && cells.some((row) => row.includes('trap'));
   return (
     <View style={styles.root}>
+      <View style={[styles.head, lost && styles.headLost]}>
+        <Text style={styles.headLabel}>{lost ? 'ПРОГРАШ' : active && floor > 0 ? 'ЗАРАЗ МОЖНА ЗАБРАТИ' : 'МАКСИМАЛЬНИЙ ВИГРАШ'}</Text>
+        <Text style={[styles.headValue, lost && styles.headValueLost]}>
+          {lost ? `−${formatCoins(bet)}` : formatCoins(active && floor > 0 ? prize(floor) : prize(TOWER_FLOORS))}
+        </Text>
+      </View>
       <View style={styles.tower}>
         {Array.from({ length: TOWER_FLOORS }, (_, k) => TOWER_FLOORS - 1 - k).map((f) => {
           const current = active && f === floor;
           return (
-            <View key={f} style={[styles.row, current && styles.rowActive]}>
+            <View key={f} style={styles.row}>
+              <Text style={[styles.num, current && styles.numActive]}>{f + 1}</Text>
               {[0, 1].map((side) => {
                 const c = cells[f][side];
+                const shown = c === 'safe-shown' || c === 'trap-shown';
                 return (
                   <Pressable
                     key={side}
@@ -88,18 +97,19 @@ export function TowerGame({ game }: { game: GameInfo }) {
                     style={[
                       styles.tile,
                       current && styles.tileActive,
-                      c === 'safe' && styles.safe,
-                      c === 'trap' && styles.trap,
-                      (c === 'safe-shown' || c === 'trap-shown') && styles.shown,
+                      (c === 'safe' || c === 'safe-shown') && styles.safe,
+                      (c === 'trap' || c === 'trap-shown') && styles.trap,
+                      shown && styles.shown,
                     ]}
                   >
-                    <Text style={styles.tileText}>
-                      {c === 'safe' || c === 'safe-shown' ? '💎' : c === 'trap' || c === 'trap-shown' ? '💀' : current ? '?' : ''}
-                    </Text>
+                    {c === 'hidden' ? (
+                      <Text style={[styles.amount, current && styles.amountActive]}>+{formatCoins(prize(f + 1))}</Text>
+                    ) : (
+                      <Text style={styles.tileIcon}>{c === 'safe' || c === 'safe-shown' ? '💎' : '💥'}</Text>
+                    )}
                   </Pressable>
                 );
               })}
-              <Text style={[styles.prize, f < floor && styles.prizeDone]}>{formatCoins(prize(f + 1))}</Text>
             </View>
           );
         })}
@@ -107,15 +117,15 @@ export function TowerGame({ game }: { game: GameInfo }) {
       <ResultLine text={message.text} tone={message.tone} />
       {active ? (
         <BigButton
-          label={floor > 0 ? `ЗАБРАТИ ${formatCoins(prize(floor))}` : 'ОБЕРИ ПЛИТУ'}
-          color="#F59E0B"
+          label={floor > 0 ? `ЗАБРАТИ ${formatCoins(prize(floor))}` : 'ОБЕРИ КЛІТИНКУ'}
+          color={floor > 0 ? colors.green : colors.surfaceAlt}
           disabled={floor === 0}
           onPress={() => cashOut()}
         />
       ) : (
         <>
           <BetSelector value={bet} onChange={setBet} />
-          <BigButton label={`ПОЧАТИ · ${formatCoins(bet)}`} onPress={start} />
+          <BigButton label={`ГРАТИ · ${formatCoins(bet)}`} color="#F59E0B" onPress={start} />
         </>
       )}
     </View>
@@ -124,24 +134,30 @@ export function TowerGame({ game }: { game: GameInfo }) {
 
 const styles = StyleSheet.create({
   root: { gap: 12, alignItems: 'center' },
-  tower: { gap: 5, width: '100%', maxWidth: 380, padding: 10, borderRadius: 18, backgroundColor: '#1B1433', borderWidth: 2, borderColor: '#6D28D9' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, padding: 3 },
-  rowActive: { backgroundColor: 'rgba(250,204,21,0.15)' },
+  head: { width: '100%', maxWidth: 400, borderRadius: 16, paddingVertical: 12, alignItems: 'center', backgroundColor: '#1F2937', borderWidth: 1, borderColor: '#374151' },
+  headLost: { backgroundColor: '#3B1111', borderColor: '#7F1D1D' },
+  headLabel: { color: colors.muted, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  headValue: { color: colors.gold, fontWeight: '900', fontSize: 28 },
+  headValueLost: { color: colors.red },
+  tower: { gap: 6, width: '100%', maxWidth: 400 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  num: { width: 18, color: colors.muted, fontWeight: '800', fontSize: 12, textAlign: 'center' },
+  numActive: { color: '#22D3EE' },
   tile: {
     flex: 1,
     height: 40,
     borderRadius: 10,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: '#1E293B',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileActive: { borderColor: colors.gold, borderWidth: 2, backgroundColor: '#3B2F63' },
-  safe: { backgroundColor: '#166534', borderColor: '#22C55E' },
-  trap: { backgroundColor: '#7F1D1D', borderColor: colors.red },
-  shown: { opacity: 0.45 },
-  tileText: { fontSize: 20, color: colors.text, fontWeight: '900' },
-  prize: { width: 96, textAlign: 'right', color: colors.muted, fontWeight: '800', fontSize: 12 },
-  prizeDone: { color: colors.gold },
+  tileActive: { borderColor: '#22D3EE', borderWidth: 2, backgroundColor: '#0E3A48' },
+  safe: { backgroundColor: '#15803D', borderColor: '#4ADE80' },
+  trap: { backgroundColor: '#9F1239', borderColor: '#F43F5E' },
+  shown: { opacity: 0.4 },
+  amount: { color: '#94A3B8', fontWeight: '800', fontSize: 13 },
+  amountActive: { color: '#FFFFFF' },
+  tileIcon: { fontSize: 20 },
 });

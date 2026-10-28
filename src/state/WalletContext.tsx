@@ -14,7 +14,7 @@ import {
 } from './progress';
 import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
-import { INCOME_CAP_HOURS, SELL_RATE, findItem, hourlyIncome } from './shop';
+import { INCOME_CAP_HOURS, findItem, hourlyIncome, sellPrice } from './shop';
 import { SportBet, SportPick, betResult } from './sports';
 import { tourneyRound } from './friends';
 import { PICKAXES } from '../games/mineEngine';
@@ -27,9 +27,9 @@ export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
-// Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS.
+// Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS (за бажанням ghj усі поточні багаторазові).
 const PROMO_CODES: Record<string, number> = { sosunok: 100000, salo: 1000000, ben: 500000 };
-const REUSABLE_PROMOS = ['sosunok'];
+const REUSABLE_PROMOS = ['sosunok', 'salo', 'ben'];
 export const CASHBACK_RATE = 0.02;
 
 export interface PlayerState {
@@ -153,6 +153,7 @@ interface WalletApi {
   placeSportBet: (picks: SportPick[], stake: number) => boolean;
   redeemPromo: (code: string) => number | 'used' | 'invalid';
   enterTourney: (round: number) => void;
+  grantItem: (id: string) => 'item' | 'cash' | 'none';
   openGame: (gameId: string) => void;
   reset: () => void;
 }
@@ -378,7 +379,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const item = findItem(id);
       const s = stateRef.current;
-      if (!item || s.owned.includes(id) || s.balance < item.price) return false;
+      if (!item || item.prize || s.owned.includes(id) || s.balance < item.price) return false;
       // Дохід, що вже набіг, зараховуємо до покупки, щоб новий бізнес не платив за минуле.
       const income = pendingIncome();
       commit((p) => ({
@@ -396,7 +397,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const item = findItem(id);
       if (!item || !stateRef.current.owned.includes(id)) return 0;
-      const amount = Math.floor(item.price * SELL_RATE);
+      const amount = sellPrice(item);
       const income = pendingIncome();
       commit((p) => ({
         ...p,
@@ -509,6 +510,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  // Приз без оплати. Якщо такий уже є, віддаємо його вартість грошима.
+  const grantItem = useCallback(
+    (id: string) => {
+      const item = findItem(id);
+      if (!item) return 'none' as const;
+      if (stateRef.current.owned.includes(id)) {
+        commit((p) => ({ ...p, balance: p.balance + item.price }));
+        return 'cash' as const;
+      }
+      commit((p) => ({ ...p, owned: [...p.owned, id] }));
+      return 'item' as const;
+    },
+    [commit],
+  );
+
   const enterTourney = useCallback(
     (round: number) => commit((p) => ({ ...p, tourney: { round, net: 0 } })),
     [commit],
@@ -549,6 +565,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         placeSportBet,
         redeemPromo,
         enterTourney,
+        grantItem,
         openGame,
         reset,
       }}

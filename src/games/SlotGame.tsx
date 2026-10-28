@@ -8,6 +8,8 @@ import { WinCounter } from '../components/WinCounter';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
+import { KarasBonus } from './KarasBonus';
+import { SPRINTER_ID } from './karasWheel';
 import { Grid, ROWS, SlotConfig, evaluateGrid, paylines, randomSymbol, spinGrid } from './slotEngine';
 
 const REEL_BASE_MS = 700;
@@ -23,6 +25,9 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const [highlight, setHighlight] = useState<boolean[][]>([]);
   const [message, setMessage] = useState({ text: 'Удачі!', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const [freeSpins, setFreeSpins] = useState(0);
+  // У «Золотому Карасі» скатери запускають колесо фортуни замість фриспінів.
+  const wheelBonus = game.id === 'golden-karas';
+  const [bonusBet, setBonusBet] = useState<number | null>(null);
   const [auto, setAuto] = useState(0);
   const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
   const settings = useSettings();
@@ -95,7 +100,14 @@ export function SlotGame({ game }: { game: GameInfo }) {
             celebrate({ kind: 'win', amount: outcome.win, bet });
           } else sfx('win');
         }
-        if (outcome.freeSpins > 0) {
+        if (outcome.freeSpins > 0 && wheelBonus) {
+          setAuto(0);
+          wallet.track('bonuses');
+          parts.push('Колесо фортуни!');
+          celebrate({ kind: 'intro', emoji: '🎡', title: 'КОЛЕСО ФОРТУНИ!', subtitle: 'Крути і вигравай до ×100 або Mercedes Sprinter' }).then(() =>
+            setBonusBet(bet),
+          );
+        } else if (outcome.freeSpins > 0) {
           setFreeSpins((n) => n + outcome.freeSpins);
           wallet.track('bonuses');
           parts.push(`${outcome.freeSpins} фриспінів!`);
@@ -113,7 +125,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
 
   // Автогра і фриспіни запускають наступний оберт, коли барабани зупинились.
   useEffect(() => {
-    if (busy) return;
+    if (busy || bonusBet != null) return;
     if (freeSpins > 0 || auto > 0) {
       const t = setTimeout(() => {
         if (freeSpins === 0) setAuto((n) => n - 1);
@@ -122,10 +134,24 @@ export function SlotGame({ game }: { game: GameInfo }) {
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, freeSpins, auto]);
+  }, [busy, freeSpins, auto, bonusBet]);
+
+  const finishBonus = (money: number, sprinter: boolean) => {
+    setBonusBet(null);
+    if (sprinter) {
+      const r = wallet.grantItem(SPRINTER_ID);
+      wallet.notify(r === 'cash' ? 'Другий Sprinter: зараховано його вартість грошима!' : '🚐 Mercedes Sprinter 3.0 тепер твій!');
+      setMessage({ text: '🚐 MERCEDES SPRINTER 3.0!', tone: 'win' });
+    } else if (money > 0) {
+      wallet.win(game.id, money);
+      setLastWin((w) => ({ amount: money, key: w.key + 1 }));
+      setMessage({ text: `Колесо фортуни: +${formatCoins(money)}`, tone: 'win' });
+    }
+  };
 
   return (
     <View style={styles.root}>
+      {bonusBet != null && <KarasBonus bet={bonusBet} onDone={finishBonus} />}
       {config.jackpotSymbol && (
         <View style={styles.jackpot}>
           <Text style={styles.jackpotLabel}>ПРОГРЕСИВНИЙ ДЖЕКПОТ</Text>
@@ -162,18 +188,18 @@ export function SlotGame({ game }: { game: GameInfo }) {
       <BigButton
         label={busy ? '...' : freeSpins > 0 ? 'ФРИСПІН' : 'КРУТИТИ'}
         onPress={spin}
-        disabled={busy || auto > 0}
+        disabled={busy || auto > 0 || bonusBet != null}
       />
       <View style={styles.autoRow}>
         <Chip label={auto > 0 ? `Стоп (${auto})` : 'Авто ×10'} active={auto > 0} onPress={() => setAuto(auto > 0 ? 0 : 10)} />
         <Chip label="Авто ×50" onPress={() => setAuto(50)} disabled={auto > 0} />
       </View>
-      <Paytable config={config} art={game.art} />
+      <Paytable config={config} art={game.art} wheel={wheelBonus} />
     </View>
   );
 }
 
-function Paytable({ config, art }: { config: SlotConfig; art?: GameInfo['art'] }) {
+function Paytable({ config, art, wheel }: { config: SlotConfig; art?: GameInfo['art']; wheel?: boolean }) {
   const lines = paylines(config).length;
   return (
     <View style={styles.paytable}>
@@ -183,7 +209,9 @@ function Paytable({ config, art }: { config: SlotConfig; art?: GameInfo['art'] }
           {art?.[s.id] ? <Image source={art[s.id]} style={styles.payImage} /> : <Text style={styles.payEmoji}>{s.emoji}</Text>}
           <Text style={styles.payText}>
             {s.id === config.scatter
-              ? '3/4/5 будь-де: ×5/×20/×100 ставки + фриспіни'
+              ? wheel
+                ? '3/4/5 будь-де: ×5/×20/×100 ставки + Колесо фортуни (до ×100 або Mercedes Sprinter 3.0)'
+                : '3/4/5 будь-де: ×5/×20/×100 ставки + фриспіни'
               : s.id === config.wild
                 ? `Wild: замінює символи · ${s.pays.map((p) => `×${p}`).join(' / ')}`
                 : s.id === config.jackpotSymbol

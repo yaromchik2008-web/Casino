@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { getSettings, sfx } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
 import { BetSelector, BigButton, Panel, ResultLine, haptic } from '../components/ui';
@@ -19,11 +19,38 @@ import {
   strike,
 } from './mineEngine';
 
-// Візерунок «пікселів» для кожного блока свій, але стабільний між рендерами.
-function specks(seed: number) {
-  let x = (seed * 9301 + 49297) % 233280;
-  const next = () => (x = (x * 9301 + 49297) % 233280) / 233280;
-  return Array.from({ length: 6 }, () => ({ l: next() * 0.75, t: next() * 0.75, s: 0.14 + next() * 0.12 }));
+const TEX = {
+  dirt: require('../../assets/arcade/dirt.png'),
+  grass: require('../../assets/arcade/grass.png'),
+  stone: require('../../assets/arcade/stone.png'),
+  gravel: require('../../assets/arcade/gravel.png'),
+  coal: require('../../assets/arcade/coal.png'),
+  iron: require('../../assets/arcade/iron.png'),
+  gold: require('../../assets/arcade/gold.png'),
+  diamond: require('../../assets/arcade/diamond.png'),
+  chest: require('../../assets/arcade/chest.png'),
+  tnt: require('../../assets/arcade/tnt.png'),
+};
+const CRACKS = [
+  require('../../assets/arcade/crack1.png'),
+  require('../../assets/arcade/crack2.png'),
+  require('../../assets/arcade/crack3.png'),
+];
+const PICKS = [
+  require('../../assets/arcade/pick_wood.png'),
+  require('../../assets/arcade/pick_stone.png'),
+  require('../../assets/arcade/pick_iron.png'),
+  require('../../assets/arcade/pick_diamond.png'),
+];
+
+const STARS: [number, number, number][] = [
+  [6, 20, 0.9], [18, 55, 0.6], [31, 15, 0.8], [44, 70, 0.5], [57, 30, 0.9], [69, 60, 0.6], [83, 18, 0.7], [92, 50, 0.8],
+];
+
+function texture(block: Block, index: number) {
+  if (block.type === 'dirt') return index < MINE_COLS ? TEX.grass : TEX.dirt;
+  if (block.type === 'stone') return index % 3 === 0 ? TEX.gravel : TEX.stone;
+  return TEX[block.type];
 }
 
 function BlockView({
@@ -49,56 +76,47 @@ function BlockView({
     shake.setValue(1);
     Animated.spring(shake, { toValue: 0, friction: 3, tension: 200, useNativeDriver: true }).start();
   }
-  if (block.broken) return <View style={[styles.cave, { width: size, height: size }]} />;
+  if (block.broken)
+    return (
+      <View style={{ width: size, height: size }}>
+        <Image source={TEX.dirt} style={{ width: size, height: size }} />
+        <View style={[StyleSheet.absoluteFill, styles.caveShade]} />
+      </View>
+    );
   const damage = 1 - block.hp / info.hp;
-  const ore = info.value > 0 || block.type === 'coal';
   const depth = Math.floor(index / MINE_COLS);
   return (
     <Pressable onPress={onPress} disabled={!canHit}>
       <Animated.View
-        style={[
-          styles.block,
-          {
-            width: size,
-            height: size,
-            backgroundColor: info.color,
-            transform: [{ translateX: shake.interpolate({ inputRange: [0, 1], outputRange: [0, 5] }) }],
-          },
-        ]}
+        style={{ width: size, height: size, transform: [{ translateX: shake.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) }] }}
       >
-        {specks(index * 7 + depth).map((p, k) => (
-          <View
-            key={k}
-            style={[
-              styles.px,
-              {
-                left: p.l * size,
-                top: p.t * size,
-                width: p.s * size * (ore ? 1.25 : 1),
-                height: p.s * size * (ore ? 1.25 : 1),
-                backgroundColor: ore || k % 2 ? info.dark : 'rgba(0,0,0,0.18)',
-                borderRadius: ore ? 2 : 0,
-              },
-            ]}
-          />
-        ))}
-        {block.type === 'tnt' && <View style={[styles.tntBand, { top: size * 0.38, height: size * 0.24 }]} />}
-        {info.icon && (block.type === 'chest' || block.type === 'tnt' || block.type === 'diamond') ? (
-          <Text style={{ fontSize: size * 0.4 }}>{info.icon}</Text>
-        ) : null}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Math.min(0.35, depth * 0.02) + (canHit ? 0 : 0.3)})` }]} />
-        {damage > 0 && (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${damage * 0.35})` }]}>
-            <Text style={[styles.crack, { fontSize: size * 0.5 }]}>{damage > 0.6 ? '💢' : '⚡'}</Text>
-          </View>
-        )}
+        <Image source={texture(block, index)} style={{ width: size, height: size }} />
+        {damage > 0 && <Image source={CRACKS[Math.min(2, Math.floor(damage * 3))]} style={StyleSheet.absoluteFill} />}
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Math.min(0.3, depth * 0.018) + (canHit ? 0 : 0.22)})` }]}
+        />
       </Animated.View>
     </Pressable>
   );
 }
 
-// Кирка, що сама стрибає на блок і б'є.
-function FlyingPick({ x, y, size, hitKey }: { x: number; y: number; size: number; hitKey: number }) {
+// Кирка, що сама стрибає на блок і б'є. Над блоком видно його міцність.
+function FlyingPick({
+  x,
+  y,
+  size,
+  hitKey,
+  tier,
+  hp,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  hitKey: number;
+  tier: number;
+  hp: number | null;
+}) {
   const jump = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (getSettings().lite) return;
@@ -106,23 +124,30 @@ function FlyingPick({ x, y, size, hitKey }: { x: number; y: number; size: number
     Animated.timing(jump, { toValue: 1, duration: 260, useNativeDriver: true }).start();
   }, [hitKey, jump]);
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.pick,
-        {
-          width: size,
-          height: size,
-          transform: [
-            { translateX: x + size * 0.35 },
-            { translateY: jump.interpolate({ inputRange: [0, 0.5, 1], outputRange: [y - size * 0.9, y - size * 0.25, y - size * 0.45] }) },
-            { rotate: jump.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-50deg', '35deg', '0deg'] }) },
-          ],
-        },
-      ]}
-    >
-      <Text style={{ fontSize: size * 0.62 }}>⛏️</Text>
-    </Animated.View>
+    <>
+      {hp != null && (
+        <View pointerEvents="none" style={[styles.hp, { left: x - size * 0.3, top: y - 22, width: size * 1.6 }]}>
+          <Text style={styles.hpText}>❤ {hp}/100</Text>
+        </View>
+      )}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.pick,
+          {
+            width: size,
+            height: size,
+            transform: [
+              { translateX: x + size * 0.1 },
+              { translateY: jump.interpolate({ inputRange: [0, 0.5, 1], outputRange: [y - size * 0.7, y - size * 0.05, y] }) },
+              { rotate: jump.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-45deg', '25deg', '0deg'] }) },
+            ],
+          },
+        ]}
+      >
+        <Image source={PICKS[tier] ?? PICKS[0]} style={{ width: size * 0.8, height: size * 0.8 }} />
+      </Animated.View>
+    </>
   );
 }
 
@@ -154,7 +179,7 @@ export function MineGame({
   const [message, setMessage] = useState({ text: 'Копай глибше: там цінніша руда', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const pick = duel ? PICKAXES[0] : PICKAXES[wallet.state.pickaxe];
   const nextPick = PICKAXES[wallet.state.pickaxe + 1];
-  const size = Math.floor((Math.min(width, 480) - 40 - (MINE_COLS - 1) * 2) / MINE_COLS);
+  const size = Math.floor((Math.min(width, 480) - 32) / MINE_COLS);
 
   const show = (v: number) => (duel ? `${Math.round(v)} очок` : formatCoins(v));
 
@@ -250,7 +275,7 @@ export function MineGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blocks, strikes, auto]);
 
-  const gap = 2;
+  const gap = 0;
   const pickPos = target >= 0 ? { x: (target % MINE_COLS) * (size + gap), y: Math.floor(target / MINE_COLS) * (size + gap) } : null;
 
   return (
@@ -273,8 +298,13 @@ export function MineGame({
       <ResultLine text={message.text} tone={message.tone} />
       {blocks ? (
         <View style={styles.mine}>
-          <View style={styles.grass} />
-          <View style={[styles.grid, { width: size * MINE_COLS + 2 * (MINE_COLS - 1) }]}>
+          <View style={[styles.sky, { width: size * MINE_COLS }]}>
+            {STARS.map((st, k) => (
+              <View key={k} style={[styles.star, { left: `${st[0]}%`, top: `${st[1]}%`, opacity: st[2] }]} />
+            ))}
+            <View style={styles.moon} />
+          </View>
+          <View style={[styles.grid, { width: size * MINE_COLS }]}>
             {blocks.map((b, i) => (
               <BlockView
                 key={i}
@@ -286,7 +316,14 @@ export function MineGame({
                 shakeKey={shakes[i] ?? 0}
               />
             ))}
-            {pickPos && strikes > 0 && <FlyingPick x={pickPos.x} y={pickPos.y} size={size} hitKey={hitKey} />}
+            {pickPos && strikes > 0 && <FlyingPick
+                x={pickPos.x}
+                y={pickPos.y}
+                size={size}
+                hitKey={hitKey}
+                tier={duel ? 0 : wallet.state.pickaxe}
+                hp={blocks[target] && !blocks[target].broken ? Math.max(1, Math.round((blocks[target].hp / BLOCKS[blocks[target].type].hp) * 100)) : null}
+              />}
           </View>
           <View style={styles.btnRow}>
             <BigButton label={auto ? '⏸ ПАУЗА' : '▶ АВТО'} color={colors.blue} onPress={() => setAuto(!auto)} style={styles.half} />
@@ -344,9 +381,15 @@ const styles = StyleSheet.create({
   infoText: { color: colors.text, fontWeight: '800' },
   energy: { width: '100%', height: 10, borderRadius: 5, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   energyFill: { height: '100%', backgroundColor: colors.green },
-  mine: { gap: 10, alignItems: 'center' },
+  mine: { gap: 0, alignItems: 'center' },
   grass: { height: 10, alignSelf: 'stretch', backgroundColor: '#4CAF50', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, justifyContent: 'center', marginTop: -10 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' },
+  sky: { height: 70, alignSelf: 'center', backgroundColor: '#1E2350', borderTopLeftRadius: 12, borderTopRightRadius: 12, overflow: 'hidden' },
+  star: { position: 'absolute', width: 3, height: 3, backgroundColor: '#FFFFFF' },
+  moon: { position: 'absolute', right: 18, top: 12, width: 22, height: 22, backgroundColor: '#F4F1C9' },
+  caveShade: { backgroundColor: 'rgba(12,8,4,0.72)' },
+  hp: { position: 'absolute', zIndex: 6, alignItems: 'center' },
+  hpText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13, textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
   block: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -360,7 +403,7 @@ const styles = StyleSheet.create({
   px: { position: 'absolute' },
   tntBand: { position: 'absolute', left: 0, right: 0, backgroundColor: '#F5F5F5' },
   pick: { position: 'absolute', left: 0, top: 0, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  btnRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
+  btnRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginTop: 12 },
   half: { flex: 1 },
   crack: { position: 'absolute', alignSelf: 'center', top: '22%', opacity: 0.85 },
   cave: { backgroundColor: '#140F0B', borderWidth: 1, borderColor: '#0A0705' },

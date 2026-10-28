@@ -22,7 +22,7 @@ export function useFriendSync() {
         await startFriends(telegramName() ?? 'Гравець');
         const s = ref.current.state;
         const status = statusFor(s.balance + assetsValue(s.owned));
-        await syncProfile({ balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}` });
+        await syncProfile({ balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}`, owned: s.owned });
         if (s.tourney && s.tourney.round === tourneyRound()) await reportTourney(s.tourney.round, s.tourney.net).catch(() => {});
         const got = await claimTransfers();
         if (got > 0 && !stopped) {

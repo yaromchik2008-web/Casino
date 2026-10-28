@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { sfx } from '../audio/sound';
 import { BigButton, Chip, Panel } from '../components/ui';
 import { friendsEnabled } from '../config';
@@ -21,6 +21,7 @@ import {
   tourneyRound,
 } from '../state/friends';
 import { telegramName } from '../telegram';
+import { PlayerProfile } from './PlayerProfile';
 import { formatDuration, useNow } from '../components/useNow';
 import { TOURNAMENT_PRIZES, leaderboard, weekEndsAt, weekId, weekProgress } from '../state/progress';
 import { useWallet } from '../state/WalletContext';
@@ -63,6 +64,7 @@ function SixHours() {
   const [rows, setRows] = useState<TourneyRow[]>([]);
   const [last, setLast] = useState<TourneyResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState<TourneyRow | null>(null);
   const joined = wallet.state.tourney?.round === round;
   const myNet = joined ? wallet.state.tourney!.net : 0;
 
@@ -133,15 +135,16 @@ function SixHours() {
       <Panel style={styles.board}>
         <Text style={styles.boardTitle}>Учасники</Text>
         {board.length === 0 && <Text style={styles.note}>Поки нікого. Будь першим!</Text>}
+        {open && <PlayerProfile id={open.id} name={open.name} onClose={() => setOpen(null)} />}
         {board.map((r, i) => (
-          <View key={r.id} style={[styles.row, r.id === me?.id && styles.rowMe]}>
+          <Pressable key={r.id} onPress={() => setOpen(r)} style={[styles.row, r.id === me?.id && styles.rowMe]}>
             <Text style={styles.place}>{i < 3 ? ['🥇', '🥈', '🥉'][i] : `${i + 1}`}</Text>
             <Text style={[styles.name, r.id === me?.id && styles.nameMe]}>{r.name}</Text>
             <Text style={styles.points}>
               {r.earned >= 0 ? '+' : '−'}
               {formatCoins(Math.abs(r.earned))}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </Panel>
       {last && (
@@ -159,6 +162,7 @@ function Leaders() {
   const { me, error, setError } = useOnline();
   const [top, setTop] = useState<Leader[]>([]);
   const [rank, setRank] = useState<number | null>(null);
+  const [open, setOpen] = useState<Leader | null>(null);
   useEffect(() => {
     if (!me) return;
     const load = () =>
@@ -178,8 +182,10 @@ function Leaders() {
       </Panel>
       <Panel style={styles.board}>
         <Text style={styles.boardTitle}>Найбагатші гравці</Text>
+        <Text style={styles.note2}>Натисни на гравця, щоб подивитися його майно</Text>
+        {open && <PlayerProfile id={open.id} name={open.name} onClose={() => setOpen(null)} />}
         {top.map((r, i) => (
-          <View key={r.id} style={[styles.row, r.id === me?.id && styles.rowMe]}>
+          <Pressable key={r.id} onPress={() => setOpen(r)} style={[styles.row, r.id === me?.id && styles.rowMe]}>
             <Text style={styles.place}>{i < 3 ? ['🥇', '🥈', '🥉'][i] : `${i + 1}`}</Text>
             <View style={styles.name}>
               <Text style={[styles.leaderName, r.id === me?.id && styles.nameMe]}>{r.name}</Text>
@@ -188,7 +194,7 @@ function Leaders() {
               </Text>
             </View>
             <Text style={styles.points}>{formatCoins(Number(r.balance))}</Text>
-          </View>
+          </Pressable>
         ))}
       </Panel>
     </>

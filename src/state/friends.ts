@@ -13,6 +13,7 @@ export interface Profile {
   level: number;
   status: string;
   updated_at: string;
+  owned?: string[];
 }
 
 export interface Message {
@@ -172,15 +173,31 @@ export function myProfile() {
   return me;
 }
 
-export async function syncProfile(fields: Partial<Pick<Profile, 'balance' | 'level' | 'status' | 'name'>>) {
+let ownedColumn = true;
+
+export async function syncProfile(fields: Partial<Pick<Profile, 'balance' | 'level' | 'status' | 'name' | 'owned'>>) {
   if (!me) return;
-  const { data, error } = await db()
-    .from('profiles')
-    .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq('id', me.id)
-    .select()
-    .single();
+  const send = (f: typeof fields) =>
+    db()
+      .from('profiles')
+      .update({ ...f, updated_at: new Date().toISOString() })
+      .eq('id', me!.id)
+      .select()
+      .single();
+  // Колонки owned немає, поки не запущено docs/supabase-v4.sql: тоді синхронізуємо без майна.
+  const { owned, ...rest } = fields;
+  let { data, error } = await send(ownedColumn && owned ? fields : rest);
+  if (error && owned && ownedColumn && /owned/.test(error.message)) {
+    ownedColumn = false;
+    ({ data, error } = await send(rest));
+  }
   if (!error && data) me = data as Profile;
+}
+
+export async function fetchProfile(id: string): Promise<Profile | null> {
+  const { data, error } = await db().from('profiles').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as Profile) ?? null;
 }
 
 export async function listFriends(): Promise<Profile[]> {

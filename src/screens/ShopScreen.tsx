@@ -7,6 +7,7 @@ import { ACHIEVEMENTS } from '../state/achievements';
 import {
   ItemCategory,
   SELL_RATE,
+  sellPrice,
   SHOP_CATEGORIES,
   SHOP_ITEMS,
   STATUSES,
@@ -93,7 +94,7 @@ export function ShopScreen() {
               <Chip key={c.id} label={`${c.icon} ${c.label}`} active={cat === c.id} onPress={() => setCat(c.id)} />
             ))}
           </View>
-          {SHOP_ITEMS.filter((i) => i.category === cat).map((item) => {
+          {SHOP_ITEMS.filter((i) => i.category === cat && !i.prize).map((item) => {
             const owned = s.owned.includes(item.id);
             const afford = s.balance >= item.price;
             return (
@@ -142,7 +143,7 @@ export function ShopScreen() {
                       {item!.emoji} {item!.title}
                     </Text>
                     <Chip
-                      label={confirmSell === item!.id ? `Продати за ${formatCoins(item!.price * SELL_RATE)}?` : 'Продати'}
+                      label={confirmSell === item!.id ? `Продати за ${formatCoins(sellPrice(item!))}?` : 'Продати'}
                       active={confirmSell === item!.id}
                       onPress={() => {
                         if (confirmSell === item!.id) {

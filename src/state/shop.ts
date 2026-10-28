@@ -9,6 +9,7 @@ export interface ShopItem {
   category: ItemCategory;
   price: number;
   income?: number; // за годину
+  prize?: boolean; // не продається в магазині, лише виграш; продається за повну ціну
 }
 
 const UAH = 100;
@@ -38,6 +39,8 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'car-megane', title: 'Renault Megane', emoji: '🚘', category: 'car', price: 280000 * UAH },
   { id: 'car-suv', title: 'Кросовер', emoji: '🚙', category: 'car', price: 450000 * UAH },
   { id: 'car-sport', title: 'Спорткар', emoji: '🏎️', category: 'car', price: 1500000 * UAH },
+  // Мегаприз бонусу «Золотого Карася». Ціна як у вживаного на ринку України (≈ $21 тис.).
+  { id: 'prize-sprinter', title: 'Mercedes Sprinter 3.0', emoji: '🚐', category: 'car', price: 900000 * UAH, prize: true },
   { id: 'car-yacht', title: 'Яхта', emoji: '🛥️', category: 'car', price: 3000000 * UAH },
 
   { id: 'home-room', title: 'Кімната в гуртожитку', emoji: '🛏️', category: 'home', price: 1000 * UAH },
@@ -57,6 +60,10 @@ export const SHOP_ITEMS: ShopItem[] = [
 
 export const SELL_RATE = 0.7;
 export const INCOME_CAP_HOURS = 24;
+
+export function sellPrice(item: ShopItem) {
+  return item.prize ? item.price : Math.floor(item.price * SELL_RATE);
+}
 
 export function findItem(id: string) {
   return SHOP_ITEMS.find((i) => i.id === id);
