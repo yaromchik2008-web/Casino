@@ -353,7 +353,17 @@ export async function lastTourneyResult(): Promise<TourneyResult | null> {
 /** Прив'язує Telegram до акаунта, щоб бот міг надсилати сповіщення. Сервер перевіряє підпис initData. */
 /** Посилання на оплату пакета зірками (docs/supabase-v9.sql + функція бота). */
 export async function createStarsInvoice(pack: string): Promise<string> {
-  const { data, error } = await db().functions.invoke('tg', { body: { action: 'invoice', pack } });
+  const res = await db().functions.invoke('tg', { body: { action: 'invoice', pack } });
+  const error = res.error;
+  // Функція може віддати JSON як текст (без Content-Type), тоді розбираємо самі.
+  let data = res.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      data = null;
+    }
+  }
   if (error || !data?.ok || !data.link) throw new Error(data?.error ?? error?.message ?? 'стара версія функції tg');
   return data.link as string;
 }

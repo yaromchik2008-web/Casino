@@ -17,6 +17,7 @@ const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type': 'application/json',
 };
 
 // Пакети ігрових ₴ за Telegram Stars (той самий список у src/state/stars.ts).
