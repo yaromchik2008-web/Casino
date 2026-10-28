@@ -354,7 +354,7 @@ export async function lastTourneyResult(): Promise<TourneyResult | null> {
 /** Посилання на оплату пакета зірками (docs/supabase-v9.sql + функція бота). */
 export async function createStarsInvoice(pack: string): Promise<string> {
   const { data, error } = await db().functions.invoke('tg', { body: { action: 'invoice', pack } });
-  if (error || !data?.ok || !data.link) throw new Error('invoice');
+  if (error || !data?.ok || !data.link) throw new Error(data?.error ?? error?.message ?? 'invoice');
   return data.link as string;
 }
 

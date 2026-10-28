@@ -166,7 +166,10 @@ Deno.serve(async (req) => {
       const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
       const { data } = await admin.auth.getUser(jwt);
       const pack = PACKS[String(body.pack)];
-      if (!data.user || !pack) return new Response(JSON.stringify({ ok: false }), { status: 400, headers: cors });
+      if (!data.user || !pack) {
+        console.log('invoice refused', { user: !!data.user, pack: body.pack, token: !!BOT });
+        return new Response(JSON.stringify({ ok: false, error: !data.user ? 'no user' : 'no pack' }), { headers: cors });
+      }
       const r = await tgApi('createInvoiceLink', {
         title: pack.title,
         description: `${pack.title} для Casino Victor. Ігрові гривні не можна вивести чи обміняти на справжні гроші.`,
@@ -174,7 +177,8 @@ Deno.serve(async (req) => {
         currency: 'XTR',
         prices: [{ label: pack.title, amount: pack.stars }],
       });
-      return new Response(JSON.stringify({ ok: !!r.ok, link: r.result }), { headers: cors });
+      if (!r.ok) console.log('createInvoiceLink failed', r.description);
+      return new Response(JSON.stringify({ ok: !!r.ok, link: r.result, error: r.description }), { headers: cors });
     }
     if (body.action === 'link') {
       const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');

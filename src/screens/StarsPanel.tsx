@@ -44,8 +44,8 @@ export function StarsPanel() {
         }
       }
       setMsg({ text: 'Оплата пройшла, ₴ прийдуть протягом хвилини', ok: true });
-    } catch {
-      setMsg({ text: 'Не вдалося створити оплату. Спробуй пізніше', ok: false });
+    } catch (e) {
+      setMsg({ text: `Не вдалося створити оплату (${e instanceof Error ? e.message : 'помилка'})`, ok: false });
     } finally {
       setBusy(null);
     }
