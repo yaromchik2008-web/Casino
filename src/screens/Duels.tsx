@@ -25,11 +25,12 @@ import { colors, formatCoins } from '../theme';
 
 // Ігри для дуелі: обидва грають однаковий раунд без ставок, рахують очки.
 export const DUEL_GAMES: { id: string; rounds: string }[] = [
-  { id: 'golden-karas', rounds: '15 обертів' },
-  { id: 'fruit-classic', rounds: '20 обертів' },
+  { id: 'golden-karas', rounds: '5 обертів' },
+  { id: 'fruit-classic', rounds: '5 обертів' },
   { id: 'shakhta', rounds: 'Один заїзд у шахту' },
 ];
-const SLOT_SPINS: Record<string, number> = { 'golden-karas': 15, 'fruit-classic': 20 };
+// Слоти в дуелі: 5 обертів, шахта: один заїзд.
+const DUEL_SPINS = 5;
 const DUEL_SPIN_BET = 100;
 const STAKES = [1000, 5000, 10000, 50000];
 const STARTED_KEY = 'freecasino:duel-started';
@@ -298,7 +299,7 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
         ) : (
           <>
             <Text style={styles.mutedCenter}>Є хвилина. Вийдеш раніше — буде 0 очок.</Text>
-            <SlotDuel game={game} spins={SLOT_SPINS[game.id] ?? 15} onDone={finish} onProgress={(p) => (progress.current = p)} />
+            <SlotDuel game={game} spins={DUEL_SPINS} onDone={finish} onProgress={(p) => (progress.current = p)} />
           </>
         )}
       </ScrollView>

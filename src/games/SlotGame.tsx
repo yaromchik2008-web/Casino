@@ -31,8 +31,10 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const [auto, setAuto] = useState(0);
   const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
   const settings = useSettings();
-  const base = settings.fastSpin ? REEL_BASE_MS / 2 : REEL_BASE_MS;
-  const stepMs = settings.fastSpin ? REEL_STEP_MS / 2 : REEL_STEP_MS;
+  // Фриспіни крутяться повільніше, щоб було видно кожен оберт.
+  const slow = freeSpins > 0 ? 1.6 : settings.fastSpin ? 0.5 : 1;
+  const base = REEL_BASE_MS * slow;
+  const stepMs = REEL_STEP_MS * slow;
   const busy = spinning.some(Boolean);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -109,6 +111,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
           );
         } else if (outcome.freeSpins > 0) {
           setFreeSpins((n) => n + outcome.freeSpins);
+          setAuto(0);
           wallet.track('bonuses');
           parts.push(`${outcome.freeSpins} фриспінів!`);
           celebrate({ kind: 'intro', emoji: '🎁', title: 'ФРИСПІНИ!', subtitle: `${outcome.freeSpins} безкоштовних обертів` });
@@ -123,12 +126,12 @@ export function SlotGame({ game }: { game: GameInfo }) {
     );
   };
 
-  // Автогра і фриспіни запускають наступний оберт, коли барабани зупинились.
+  // Автогра запускає наступний оберт. Фриспіни гравець крутить сам кнопкою.
   useEffect(() => {
     if (busy || bonusBet != null) return;
-    if (freeSpins > 0 || auto > 0) {
+    if (freeSpins === 0 && auto > 0) {
       const t = setTimeout(() => {
-        if (freeSpins === 0) setAuto((n) => n - 1);
+        setAuto((n) => n - 1);
         spin();
       }, 900);
       return () => clearTimeout(t);

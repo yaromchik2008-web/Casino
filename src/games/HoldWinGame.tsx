@@ -71,6 +71,8 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
   const [spinning, setSpinning] = useState<boolean[]>(Array(5).fill(false));
   const [highlight, setHighlight] = useState<boolean[][]>([]);
   const [bonus, setBonus] = useState<Bonus | null>(null);
+  const [waitTap, setWaitTap] = useState(false);
+  const tapRef = useRef<(() => void) | null>(null);
   const [fresh, setFresh] = useState<Set<number>>(new Set());
   const [auto, setAuto] = useState(0);
   const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
@@ -99,8 +101,15 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
     await sleep(800);
     for (;;) {
       if (!alive.current) return;
+      // Кожен оберт бонусу гравець запускає сам.
+      await new Promise<void>((r) => {
+        tapRef.current = r;
+        setWaitTap(true);
+      });
+      setWaitTap(false);
+      if (!alive.current) return;
       sfx('spin', 0.3);
-      await sleep(fast ? 350 : 700);
+      await sleep(1100);
       const r = respin(b);
       b = r.bonus;
       setFresh(new Set(r.landed.map((l) => l.index)));
@@ -243,6 +252,7 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
           })}
         </View>
         <Text style={styles.bonusTotal}>Разом: {formatCoins(total * bet)}</Text>
+        <BigButton label={waitTap ? 'КРУТИТИ ОБЕРТ' : '...'} disabled={!waitTap} onPress={() => tapRef.current?.()} />
         <ResultLine text={message.text} tone={message.tone} />
       </View>
     );

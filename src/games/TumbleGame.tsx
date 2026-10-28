@@ -34,7 +34,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
   useEffect(() => () => void (alive.current = false), []);
 
   const size = Math.floor(Math.min(56, (Math.min(width, 480) - 48 - (COLS - 1) * 4) / COLS));
-  const speed = settings.fastSpin ? 0.5 : settings.lite ? 0.75 : 1;
+  const speed = freeSpins > 0 ? 1.4 : settings.fastSpin ? 0.5 : settings.lite ? 0.75 : 1;
 
   const symbolOf = (id: string) => config.symbols.find((s) => s.id === id)!;
   const emojiOf = (c: Cell) => (c.kind === 'sym' ? symbolOf(c.id).emoji : c.kind === 'scatter' ? config.scatter.emoji : config.bomb.emoji);
@@ -61,6 +61,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
       subtitle: `${spins} фриспінів, ${config.bomb.emoji} множать виграш`,
       color: game.colors[0],
     });
+    setAuto(0);
     setFreeSpins(spins);
   };
 
@@ -140,9 +141,10 @@ export function TumbleGame({ game }: { game: GameInfo }) {
 
   useEffect(() => {
     if (busy) return;
-    if (freeSpins > 0 || auto > 0) {
+    // Фриспіни гравець крутить сам кнопкою, автогра лише для звичайних обертів.
+    if (freeSpins === 0 && auto > 0) {
       const t = setTimeout(() => {
-        if (freeSpins === 0) setAuto((n) => n - 1);
+        setAuto((n) => n - 1);
         spin();
       }, 700 * speed);
       return () => clearTimeout(t);
@@ -192,7 +194,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
       <WinCounter amount={lastWin.amount} countKey={lastWin.key} />
       <ResultLine text={message.text} tone={message.tone} />
       <BetSelector value={bet} onChange={setBet} disabled={busy || freeSpins > 0} />
-      <BigButton label={busy ? '...' : freeSpins > 0 ? 'ФРИСПІН' : 'КРУТИТИ'} onPress={spin} disabled={busy || auto > 0 || freeSpins > 0} />
+      <BigButton label={busy ? '...' : freeSpins > 0 ? 'ФРИСПІН' : 'КРУТИТИ'} onPress={spin} disabled={busy || auto > 0} />
       <View style={styles.row}>
         <Chip label={auto > 0 ? `Стоп (${auto})` : 'Авто ×10'} active={auto > 0} onPress={() => setAuto(auto > 0 ? 0 : 10)} disabled={freeSpins > 0} />
         <Chip label={`Купити бонус · ${formatCoins(bet * config.buyCost)}`} onPress={buyBonus} disabled={busy || freeSpins > 0} />

@@ -1,5 +1,5 @@
-import { forwardRef, ReactNode, useImperativeHandle, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { forwardRef, ReactNode, useImperativeHandle, useRef, useState } from 'react';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme';
 
 export interface RingSegment {
@@ -19,6 +19,8 @@ export const RingWheel = forwardRef<
 >(({ segments, size, thickness = size * 0.15, children, labelSize = 12 }, ref) => {
   const rot = useRef(new Animated.Value(0)).current;
   const current = useRef(0);
+  // У браузері обертаємо CSS-переходом, щоб не навантажувати JS на кожен кадр.
+  const [css, setCss] = useState({ deg: 0, ms: 0 });
   const n = segments.length;
   const step = 360 / n;
   const radius = size / 2 - thickness / 2 - 4;
@@ -31,6 +33,11 @@ export const RingWheel = forwardRef<
       const want = (((360 - index * step + jitter - (base % 360)) % 360) + 360) % 360;
       const target = base + 360 * 5 + want;
       current.current = target;
+      if (Platform.OS === 'web') {
+        setCss({ deg: target, ms });
+        setTimeout(onDone, ms + 50);
+        return;
+      }
       Animated.timing(rot, { toValue: target, duration: ms, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() =>
         onDone(),
       );
@@ -42,7 +49,14 @@ export const RingWheel = forwardRef<
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] },
+          Platform.OS === 'web'
+            ? ({
+                transform: [{ rotate: `${css.deg}deg` }],
+                transitionProperty: 'transform',
+                transitionDuration: `${css.ms}ms`,
+                transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+              } as object)
+            : { transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] },
         ]}
       >
         <View style={[styles.rim, { borderRadius: size / 2 }]} />

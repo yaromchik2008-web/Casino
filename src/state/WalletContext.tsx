@@ -1,3 +1,4 @@
+import { showToast } from './toast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
@@ -132,7 +133,6 @@ function rollPeriods(s: PlayerState, notes: string[]): PlayerState {
 interface WalletApi {
   state: PlayerState;
   loaded: boolean;
-  toast: string | null;
   bet: (gameId: string, group: GameGroup, amount: number) => boolean;
   win: (gameId: string, amount: number) => void;
   notify: (text: string) => void;
@@ -165,15 +165,9 @@ const WalletContext = createContext<WalletApi | null>(null);
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PlayerState>(initialState);
   const [loaded, setLoaded] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
   const stateRef = useRef(state);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const notify = useCallback((text: string) => {
-    setToast(text);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2800);
-  }, []);
+  const notify = useCallback((text: string) => showToast(text), []);
 
   const commit = useCallback(
     (fn: (s: PlayerState) => PlayerState) => {
@@ -548,7 +542,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       value={{
         state,
         loaded,
-        toast,
         bet,
         win,
         notify,

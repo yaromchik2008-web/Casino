@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { useToast } from './src/state/toast';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -86,6 +87,7 @@ function Shell() {
 
   useEffect(() => {
     if (getSettings().lite) return;
+    if (getSettings().lite) return;
     fade.setValue(0);
     Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [tab, gameId, fade]);
@@ -158,11 +160,7 @@ function Shell() {
         )}
       </Animated.View>
 
-      {wallet.toast && (
-        <View pointerEvents="none" style={styles.toast}>
-          <Text style={styles.toastText}>{wallet.toast}</Text>
-        </View>
-      )}
+      <Toast />
 
       {!game && !keyboard && (
         <SafeAreaView edges={['bottom']} style={styles.tabBar}>
@@ -256,3 +254,13 @@ const styles = StyleSheet.create({
   tabLabel: { color: colors.muted, fontSize: 10, fontWeight: '700' },
   tabLabelActive: { color: colors.gold },
 });
+
+function Toast() {
+  const toast = useToast();
+  if (!toast) return null;
+  return (
+    <View pointerEvents="none" style={styles.toast}>
+      <Text style={styles.toastText}>{toast}</Text>
+    </View>
+  );
+}

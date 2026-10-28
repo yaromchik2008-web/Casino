@@ -1,9 +1,29 @@
 import { ReactNode, useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, View, ViewStyle } from 'react-native';
 import { getSettings } from '../audio/sound';
 import { colors } from '../theme';
 
 const STRIP = 6;
+// У браузері (і в Telegram) крутимо стрічку CSS-анімацією: її малює відеокарта без роботи JS на кожен кадр.
+const CSS_SPIN = Platform.OS === 'web';
+// rn-web приймає keyframes лише через StyleSheet.create, тому кешуємо стиль для кожної пари відстань/швидкість.
+const spinStyles = new Map<string, object>();
+function cssSpin(dist: number, ms: number) {
+  const key = `${dist}:${ms}`;
+  let st = spinStyles.get(key);
+  if (!st) {
+    st = StyleSheet.create({
+      s: {
+        animationKeyframes: [{ '0%': { transform: `translateY(${-dist}px)` }, '100%': { transform: 'translateY(0px)' } }],
+        animationDuration: `${ms}ms`,
+        animationIterationCount: 'infinite',
+        animationTimingFunction: 'linear',
+      } as object,
+    }).s;
+    spinStyles.set(key, st);
+  }
+  return st;
+}
 
 /** Барабан, що прокручує стрічку символів і пружинить при зупинці. */
 export function Reel<T>({
@@ -39,6 +59,7 @@ export function Reel<T>({
 
   useEffect(() => {
     if (spinning) {
+      if (CSS_SPIN) return;
       scroll.setValue(0);
       const loop = Animated.loop(
         Animated.timing(scroll, { toValue: 1, duration: speed, easing: Easing.linear, useNativeDriver: true }),
@@ -54,12 +75,16 @@ export function Reel<T>({
     <View style={{ height, overflow: 'hidden' }}>
       {spinning ? (
         <Animated.View
-          style={{
-            gap,
-            transform: [
-              { translateY: scroll.interpolate({ inputRange: [0, 1], outputRange: [-STRIP * step, 0] }) },
-            ],
-          }}
+          style={
+            CSS_SPIN
+              ? [{ gap }, cssSpin(STRIP * step, speed)]
+              : {
+                  gap,
+                  transform: [
+                    { translateY: scroll.interpolate({ inputRange: [0, 1], outputRange: [-STRIP * step, 0] }) },
+                  ],
+                }
+          }
         >
           {strip.map((item, i) => (
             <View key={i} style={[styles.cell, cellStyle, { width: size, height: size }, styles.blur]}>
