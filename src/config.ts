@@ -7,5 +7,5 @@ export const SUPABASE_ANON_KEY =
 export const friendsEnabled = () => !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
 
 // Ім'я бота без @ для посилань-запрошень (t.me/<бот>?startapp=ref_КОД). Порожнє: даємо посилання на сайт.
-export const BOT_USERNAME = '';
+export const BOT_USERNAME = 'CasinoVictorbot';
 export const WEB_URL = 'https://yaromchik2008-web.github.io/Casino/';
