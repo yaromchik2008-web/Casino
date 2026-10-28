@@ -4,7 +4,7 @@ export const HW_COLS = 5;
 export const HW_ROWS = 5; // повне поле бонуса; основна гра бачить нижні 3 ряди
 export const BASE_ROWS = 3;
 export const TRIGGER_COINS = 6;
-export const BASE_COIN_CHANCE = 0.135; // RTP ≈ 0.90 при виплатах ×0.5 (симуляція: лінії 0.24 + бонус 0.66, бонус ≈ 1 на 98 обертів)
+export const BASE_COIN_CHANCE = 0.125; // RTP ≈ 0.96 при виплатах ×0.5 (симуляція: лінії 0.26 + бонус 0.71, бонус ≈ 1 на 142 оберти)
 export const RESPINS = 3;
 export const UNLOCK_AT = [5, 10]; // нових монет, щоб відкрити 4-й і 5-й ряд
 
@@ -104,7 +104,7 @@ export interface RespinResult {
   done: boolean;
 }
 
-export const NEW_COIN_CHANCE = 0.06;
+export const NEW_COIN_CHANCE = 0.08; // більше монет у бонусі: у середньому ≈ 100 ставок замість 65
 
 function applySpecial(cells: (HCoin | null)[], index: number) {
   const coin = cells[index]!;
