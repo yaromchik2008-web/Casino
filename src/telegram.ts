@@ -68,6 +68,10 @@ export function isTelegram(): boolean {
   return !!current();
 }
 
+export function telegramInitData(): string {
+  return current()?.initData ?? '';
+}
+
 export function telegramName(): string | undefined {
   return current()?.initDataUnsafe.user?.first_name;
 }

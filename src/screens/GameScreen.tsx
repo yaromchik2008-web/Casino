@@ -3,6 +3,8 @@ import { playMusic } from '../audio/sound';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BaccaratGame } from '../games/BaccaratGame';
 import { BlackjackGame } from '../games/BlackjackGame';
+import { ChickenGame } from '../games/ChickenGame';
+import { ColorWheelGame } from '../games/ColorWheelGame';
 import { GameInfo, GameKind } from '../games/catalog';
 import { CoinGame } from '../games/CoinGame';
 import { CrashGame } from '../games/CrashGame';
@@ -15,6 +17,7 @@ import { PlinkoGame } from '../games/PlinkoGame';
 import { PokerGame } from '../games/PokerGame';
 import { RouletteGame } from '../games/RouletteGame';
 import { SlotGame } from '../games/SlotGame';
+import { TowerGame } from '../games/TowerGame';
 import { TumbleGame } from '../games/TumbleGame';
 import { WheelGame } from '../games/WheelGame';
 import { useWallet } from '../state/WalletContext';
@@ -36,6 +39,9 @@ const COMPONENTS: Record<GameKind, ComponentType<{ game: GameInfo }>> = {
   tumble: TumbleGame,
   holdwin: HoldWinGame,
   dig: MineGame,
+  tower: TowerGame,
+  colorwheel: ColorWheelGame,
+  chicken: ChickenGame,
 };
 
 export function GameScreen({ game, onClose }: { game: GameInfo; onClose: () => void }) {

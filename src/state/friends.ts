@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, friendsEnabled } from '../config';
-import { cloudGet, cloudSet, waitTelegram } from '../telegram';
+import { cloudGet, cloudSet, telegramInitData, waitTelegram } from '../telegram';
 
 const CLOUD_KEY = 'sb_refresh';
 
@@ -37,6 +37,37 @@ export interface Duel {
   winner: string | null;
   created_at: string;
   updated_at: string;
+  accepted_at?: string | null;
+}
+
+export interface Leader {
+  id: string;
+  name: string;
+  balance: number;
+  level: number;
+  status: string;
+  rank: number;
+}
+
+export interface TourneyRow {
+  id: string;
+  name: string;
+  earned: number;
+}
+
+export interface TourneyResult {
+  round: number;
+  winner: string | null;
+  pool: number;
+  players: number;
+}
+
+export const TOURNEY_FEE = 20000;
+export const TOURNEY_MS = 6 * 3600_000;
+
+/** Поточний 6-годинний раунд турніру, як на сервері. */
+export function tourneyRound(now = Date.now()) {
+  return Math.floor(now / TOURNEY_MS);
 }
 
 let client: SupabaseClient | null = null;
@@ -67,12 +98,15 @@ const ERRORS: Record<string, string> = {
   already_played: 'Ти вже зіграв свій раунд',
   too_many_duels: 'Забагато відкритих дуелей (до 10)',
   duels_check: 'Ставка від 1 до 10 000 ₴',
+  already_joined: 'Ти вже в цьому турнірі',
 };
 
 export function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
   for (const k of Object.keys(ERRORS)) if (msg.includes(k)) return ERRORS[k];
   if (msg.toLowerCase().includes('anonymous')) return 'На сервері не ввімкнено анонімний вхід';
+  if (/tourney|leaderboard|settle|rank/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
+    return 'На сервері ще не запущено SQL з docs/supabase-v3.sql';
   if (msg.includes('duel') && (msg.includes('schema cache') || msg.includes('does not exist')))
     return 'На сервері ще не запущено SQL з docs/supabase-duels.sql';
   if (msg.includes('schema cache') || msg.includes('does not exist')) return 'На сервері ще не запущено SQL з docs/supabase.sql';
@@ -112,6 +146,7 @@ export function startFriends(defaultName: string): Promise<Profile> {
     if (existing.error) throw existing.error;
     if (existing.data) {
       me = existing.data as Profile;
+      if (inTelegram) linkTelegram(telegramInitData()).catch(() => {});
       return me;
     }
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -122,6 +157,7 @@ export function startFriends(defaultName: string): Promise<Profile> {
         .single();
       if (!ins.error) {
         me = ins.data as Profile;
+        if (inTelegram) linkTelegram(telegramInitData()).catch(() => {});
         return me;
       }
       if (!ins.error.message.includes('duplicate')) throw ins.error;
@@ -201,6 +237,11 @@ export async function claimTransfers(): Promise<number> {
 /** Дуелі гравця за останні дні, нові зверху. */
 export async function listDuels(): Promise<Duel[]> {
   if (!me) return [];
+  // Закриває прострочені виклики й раунди (з docs/supabase-v3.sql; без нього просто пропускаємо).
+  await db().rpc('settle_duels').then(
+    () => {},
+    () => {},
+  );
   const { data, error } = await db()
     .from('duels')
     .select('*')
@@ -229,4 +270,43 @@ export async function cancelDuel(id: number) {
 export async function submitDuelScore(id: number, score: number) {
   const { error } = await db().rpc('submit_duel_score', { p_id: id, p_score: Math.max(0, Math.round(score)) });
   if (error) throw error;
+}
+
+export async function leaderboard(): Promise<{ top: Leader[]; myRank: number | null }> {
+  const [top, rank] = await Promise.all([db().rpc('leaderboard'), me ? db().rpc('my_rank') : Promise.resolve({ data: null, error: null })]);
+  if (top.error) throw top.error;
+  return { top: (top.data ?? []) as Leader[], myRank: rank.data == null ? null : Number(rank.data) };
+}
+
+export async function joinTourney(): Promise<number> {
+  const { data, error } = await db().rpc('join_tourney');
+  if (error) throw error;
+  return Number(data);
+}
+
+export async function reportTourney(round: number, earned: number) {
+  const { error } = await db().rpc('report_tourney', { p_round: round, p_earned: Math.round(earned) });
+  if (error) throw error;
+}
+
+export async function tourneyBoard(round: number): Promise<TourneyRow[]> {
+  const { data, error } = await db().rpc('tourney_board', { p_round: round });
+  if (error) throw error;
+  return ((data ?? []) as TourneyRow[]).map((r) => ({ ...r, earned: Number(r.earned) }));
+}
+
+export async function lastTourneyResult(): Promise<TourneyResult | null> {
+  await db().rpc('settle_tourneys').then(
+    () => {},
+    () => {},
+  );
+  const { data, error } = await db().from('tourney_results').select('*').order('round', { ascending: false }).limit(1);
+  if (error) throw error;
+  return ((data ?? [])[0] as TourneyResult) ?? null;
+}
+
+/** Прив'язує Telegram до акаунта, щоб бот міг надсилати сповіщення. Сервер перевіряє підпис initData. */
+export async function linkTelegram(initData: string) {
+  if (!me || !initData) return;
+  await db().functions.invoke('tg', { body: { action: 'link', initData } });
 }

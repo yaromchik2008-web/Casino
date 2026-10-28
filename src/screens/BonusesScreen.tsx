@@ -11,6 +11,7 @@ import {
   HOURLY_BONUS,
   HOURLY_COOLDOWN_MS,
   WHEEL_COOLDOWN_MS,
+  CASHBACK_RATE,
   useWallet,
 } from '../state/WalletContext';
 import { colors, formatCoins, formatShort } from '../theme';
@@ -55,7 +56,7 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
   const hourlyLeft = Math.max(0, s.lastHourlyAt + HOURLY_COOLDOWN_MS - now);
   const hourlyReady = hourlyLeft === 0 || s.balance < 10;
   const wheelLeft = Math.max(0, s.lastWheelAt + WHEEL_COOLDOWN_MS - now);
-  const cashback = Math.floor(s.lossSinceCashback * 0.1);
+  const cashback = Math.floor(s.lossSinceCashback * CASHBACK_RATE);
   const cashbackReady = cashback > 0 && s.lastCashbackDay !== today;
 
   const spinWheel = () => {
@@ -170,8 +171,8 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
           />
         </Panel>
         <Panel style={styles.half}>
-          <Text style={styles.cardTitle}>💸 Кешбек 10%</Text>
-          <Text style={styles.cardSub}>Повертаємо 10% програних монет раз на день. Доступно: {formatCoins(cashback)}</Text>
+          <Text style={styles.cardTitle}>💸 Кешбек 2%</Text>
+          <Text style={styles.cardSub}>Повертаємо 2% програних монет раз на день. Доступно: {formatCoins(cashback)}</Text>
           <BigButton
             label={cashbackReady ? 'ЗАБРАТИ' : s.lastCashbackDay === today ? 'ЗАВТРА' : 'НЕМАЄ'}
             disabled={!cashbackReady}

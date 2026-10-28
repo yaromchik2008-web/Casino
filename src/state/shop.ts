@@ -51,8 +51,8 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'biz-bakery', title: 'Пекарня', emoji: '🥐', category: 'business', price: 10000 * UAH, income: 45 * UAH },
   { id: 'biz-garage', title: 'Автосервіс', emoji: '🔧', category: 'business', price: 40000 * UAH, income: 160 * UAH },
   { id: 'biz-rest', title: 'Ресторан', emoji: '🍽️', category: 'business', price: 120000 * UAH, income: 450 * UAH },
-  { id: 'biz-it', title: 'IT-компанія', emoji: '💻', category: 'business', price: 400000 * UAH, income: 1400 * UAH },
-  { id: 'biz-factory', title: 'Завод', emoji: '🏭', category: 'business', price: 1200000 * UAH, income: 4000 * UAH },
+  { id: 'biz-it', title: 'Ковбасня', emoji: '🌭', category: 'business', price: 400000 * UAH, income: 1400 * UAH },
+  { id: 'biz-factory', title: 'Майонезний завод', emoji: '🏭', category: 'business', price: 1200000 * UAH, income: 4000 * UAH },
 ];
 
 export const SELL_RATE = 0.7;
@@ -71,13 +71,18 @@ export function hourlyIncome(owned: string[]) {
 }
 
 export const STATUSES: { min: number; title: string; emoji: string }[] = [
-  { min: 0, title: 'Новачок', emoji: '🐣' },
+  { min: 0, title: 'Бомж', emoji: '🥫' },
+  { min: 500 * UAH, title: 'Безробітний', emoji: '🛋️' },
   { min: 2000 * UAH, title: 'Студент', emoji: '🎒' },
-  { min: 20000 * UAH, title: 'Середній клас', emoji: '👔' },
+  { min: 8000 * UAH, title: 'Робітяга', emoji: '🧰' },
+  { min: 20000 * UAH, title: 'Таксист', emoji: '🚕' },
+  { min: 50000 * UAH, title: 'Середній клас', emoji: '👔' },
   { min: 100000 * UAH, title: 'Підприємець', emoji: '💼' },
+  { min: 300000 * UAH, title: 'Бізнесмен', emoji: '🏢' },
   { min: 1000000 * UAH, title: 'Мільйонер', emoji: '💰' },
-  { min: 5000000 * UAH, title: 'Магнат', emoji: '🎩' },
-  { min: 20000000 * UAH, title: 'Олігарх', emoji: '👑' },
+  { min: 3000000 * UAH, title: 'Магнат', emoji: '🎩' },
+  { min: 10000000 * UAH, title: 'Олігарх', emoji: '👑' },
+  { min: 50000000 * UAH, title: 'Ахметов', emoji: '🏆' },
 ];
 
 export function statusFor(netWorth: number) {

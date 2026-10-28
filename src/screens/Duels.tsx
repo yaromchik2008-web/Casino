@@ -4,6 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWin
 import { playMusic, sfx } from '../audio/sound';
 import { Reel } from '../components/Reel';
 import { BigButton, Chip, Panel, ResultLine, haptic, parseMoney } from '../components/ui';
+import { useNow } from '../components/useNow';
 import { GameInfo, findGame } from '../games/catalog';
 import { MineGame } from '../games/MineGame';
 import { Grid, evaluateGrid, randomSymbol, spinGrid } from '../games/slotEngine';
@@ -32,6 +33,8 @@ const SLOT_SPINS: Record<string, number> = { 'golden-karas': 15, 'fruit-classic'
 const DUEL_SPIN_BET = 100;
 const STAKES = [1000, 5000, 10000, 50000];
 const STARTED_KEY = 'freecasino:duel-started';
+export const INVITE_MS = 60_000;
+export const ROUND_MS = 60_000;
 
 function gameTitle(id: string) {
   const g = findGame(id);
@@ -118,11 +121,12 @@ export function DuelList({
   const wallet = useWallet();
   const me = myProfile();
   const [busy, setBusy] = useState<number | null>(null);
+  useNow(1000);
   if (!me) return null;
-  const dayAgo = Date.now() - 24 * 3600_000;
-  const visible = duels.filter(
-    (d) => d.status === 'pending' || d.status === 'accepted' || new Date(d.updated_at).getTime() > dayAgo,
-  );
+  // Лише остання дуель, плюс відкриті виклики, на які ще треба відповісти чи зіграти.
+  const needsMe = (d: Duel) =>
+    (d.status === 'pending' && d.opponent === me.id) || (d.status === 'accepted' && myScore(d, me.id) == null);
+  const visible = duels.filter((d, i) => i === 0 || needsMe(d));
   if (!visible.length) return null;
   const nameOf = (id: string) => friends.find((f) => f.id === id)?.name ?? 'Друг';
 
@@ -165,11 +169,12 @@ export function DuelList({
         const theirs = theirScore(d, me.id);
         let line = '';
         let controls: ReactNode = null;
+        const left = Math.max(0, Math.ceil((new Date(d.created_at).getTime() + INVITE_MS - Date.now()) / 1000));
         if (d.status === 'pending' && mineChallenge) {
-          line = `Чекаємо, поки ${other} прийме`;
+          line = `Чекаємо, поки ${other} прийме · ${left} с. Гра почнеться одразу`;
           controls = <Chip label="Скасувати" disabled={busy === d.id} onPress={() => act(d, async () => (await cancelDuel(d.id), await refundNow()))} />;
         } else if (d.status === 'pending') {
-          line = `${other} викликає тебе!`;
+          line = `${other} викликає тебе! Залишилось ${left} с`;
           controls = (
             <View style={styles.row}>
               <Chip label={`Прийняти · ${formatCoins(d.stake)}`} active disabled={busy === d.id} onPress={() => accept(d)} />
@@ -189,7 +194,7 @@ export function DuelList({
                 ? `Поразка ${mine} : ${theirs}. ${other} забирає банк`
                 : `Нічия ${mine} : ${theirs}. Ставки пішли в казну гри`;
         } else {
-          line = d.status === 'declined' ? `${other} відмовився. Ставку повернуто` : 'Скасовано. Ставку повернуто';
+          line = d.status === 'declined' ? `${other} відмовився. Ставку повернуто` : 'Виклик скасовано або час вийшов. Ставку повернуто';
         }
         return (
           <Panel key={d.id} style={styles.duel}>
@@ -212,6 +217,23 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
   const [status, setStatus] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const sent = useRef(false);
+  const progress = useRef(0);
+  const [deadline] = useState(() => Date.now() + ROUND_MS);
+  const [left, setLeft] = useState(ROUND_MS / 1000);
+
+  // Хвилина на раунд: коли час вийшов, зараховуємо те, що встиг набрати.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const l = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setLeft(l);
+      if (l === 0) {
+        clearInterval(t);
+        finish(progress.current);
+      }
+    }, 500);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (game) playMusic(game.music);
@@ -256,6 +278,7 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
         <Text style={styles.barTitle} numberOfLines={1}>
           ⚔️ {opponentName} · {formatCoins(duel.stake)}
         </Text>
+        {score == null && <Text style={[styles.timer, left <= 10 && styles.timerHot]}>⏱ {left} с</Text>}
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         {score != null ? (
@@ -269,13 +292,13 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
           <Text style={styles.mutedCenter}>Цієї гри вже немає. Онови застосунок</Text>
         ) : game.kind === 'dig' ? (
           <>
-            <Text style={styles.mutedCenter}>Один заїзд дерев'яною киркою. «Забрати знахідки» завершує раунд, вихід до старту дає 0.</Text>
-            <MineGame game={game} duel={finish} />
+            <Text style={styles.mutedCenter}>Один заїзд дерев'яною киркою, кирка копає сама. «Забрати» завершує раунд.</Text>
+            <MineGame game={game} duel={finish} onProgress={(p) => (progress.current = p)} autoStart />
           </>
         ) : (
           <>
-            <Text style={styles.mutedCenter}>Вийдеш до кінця раунду — буде 0 очок.</Text>
-            <SlotDuel game={game} spins={SLOT_SPINS[game.id] ?? 15} onDone={finish} />
+            <Text style={styles.mutedCenter}>Є хвилина. Вийдеш раніше — буде 0 очок.</Text>
+            <SlotDuel game={game} spins={SLOT_SPINS[game.id] ?? 15} onDone={finish} onProgress={(p) => (progress.current = p)} />
           </>
         )}
       </ScrollView>
@@ -283,7 +306,17 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
   );
 }
 
-function SlotDuel({ game, spins, onDone }: { game: GameInfo; spins: number; onDone: (points: number) => void }) {
+function SlotDuel({
+  game,
+  spins,
+  onDone,
+  onProgress,
+}: {
+  game: GameInfo;
+  spins: number;
+  onDone: (points: number) => void;
+  onProgress: (points: number) => void;
+}) {
   const config = game.slot!;
   const { width } = useWindowDimensions();
   const [grid, setGrid] = useState<Grid>(() => spinGrid(config));
@@ -307,6 +340,7 @@ function SlotDuel({ game, spins, onDone }: { game: GameInfo; spins: number; onDo
       setSpinning(false);
       const next = total + win;
       setTotal(next);
+      onProgress(next);
       setLeft(left - 1);
       if (win > 0) {
         sfx('win');
@@ -385,6 +419,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   back: { color: colors.gold, fontSize: 16, fontWeight: '800' },
+  timer: { color: colors.gold, fontWeight: '900', fontSize: 16 },
+  timerHot: { color: colors.red },
   barTitle: { color: colors.text, fontSize: 16, fontWeight: '900', flex: 1 },
   result: { alignItems: 'center', gap: 10 },
   big: { fontSize: 48 },

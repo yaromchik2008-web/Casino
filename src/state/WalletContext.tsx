@@ -16,6 +16,7 @@ import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
 import { INCOME_CAP_HOURS, SELL_RATE, findItem, hourlyIncome } from './shop';
 import { SportBet, SportPick, betResult } from './sports';
+import { tourneyRound } from './friends';
 import { PICKAXES } from '../games/mineEngine';
 
 const KEY = 'freecasino:player:v3';
@@ -27,8 +28,9 @@ export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
 // Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS.
-const PROMO_CODES: Record<string, number> = { sosunok: 100000 };
+const PROMO_CODES: Record<string, number> = { sosunok: 100000, salo: 1000000, ben: 500000 };
 const REUSABLE_PROMOS = ['sosunok'];
+export const CASHBACK_RATE = 0.02;
 
 export interface PlayerState {
   balance: number;
@@ -61,6 +63,8 @@ export interface PlayerState {
   achievements: string[];
   sportBets: SportBet[];
   promoUsed: string[];
+  // Турнір на 6 годин: в якому раунді граю і скільки заробив (виграші мінус ставки).
+  tourney?: { round: number; net: number };
   xpV: number;
 }
 
@@ -148,6 +152,7 @@ interface WalletApi {
   claimAchievement: (id: string) => number;
   placeSportBet: (picks: SportPick[], stake: number) => boolean;
   redeemPromo: (code: string) => number | 'used' | 'invalid';
+  enterTourney: (round: number) => void;
   openGame: (gameId: string) => void;
   reset: () => void;
 }
@@ -227,6 +232,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           played: { ...s.played, [gameId]: (s.played[gameId] ?? 0) + 1 },
           jackpotPool: s.jackpotPool + Math.ceil(amount * 0.02),
           lossSinceCashback: s.lossSinceCashback + amount,
+          tourney: s.tourney && s.tourney.round === tourneyRound() ? { ...s.tourney, net: s.tourney.net - amount } : s.tourney,
           missionProgress: progress,
           missionPlayed,
         };
@@ -247,6 +253,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         biggestWin: Math.max(s.biggestWin, rounded),
         lossSinceCashback: Math.max(0, s.lossSinceCashback - rounded),
         tournamentPoints: s.tournamentPoints + rounded,
+        tourney: s.tourney && s.tourney.round === tourneyRound() ? { ...s.tourney, net: s.tourney.net + rounded } : s.tourney,
         missionProgress:
           rounded >= 1000 ? { ...s.missionProgress, bigwin: 1 } : s.missionProgress,
       }));
@@ -282,7 +289,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const claimCashback = useCallback(() => {
     const s = stateRef.current;
-    const amount = Math.floor(s.lossSinceCashback * 0.1);
+    const amount = Math.floor(s.lossSinceCashback * CASHBACK_RATE);
     if (amount <= 0 || s.lastCashbackDay === dayId()) return 0;
     commit((p) => ({ ...p, balance: p.balance + amount, lossSinceCashback: 0, lastCashbackDay: dayId() }));
     return amount;
@@ -502,6 +509,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const enterTourney = useCallback(
+    (round: number) => commit((p) => ({ ...p, tourney: { round, net: 0 } })),
+    [commit],
+  );
+
   const reset = useCallback(() => {
     const fresh = initialState();
     stateRef.current = fresh;
@@ -536,6 +548,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         claimAchievement,
         placeSportBet,
         redeemPromo,
+        enterTourney,
         openGame,
         reset,
       }}

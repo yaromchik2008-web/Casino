@@ -61,8 +61,8 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
       action: () => onNavigate('bonuses'),
     },
     {
-      title: 'Тижневий турнір',
-      text: 'Призовий фонд 1 225 ₴. Вигравай і піднімайся в рейтингу',
+      title: 'Турнір «Шість годин»',
+      text: 'Вхід 200 ₴. Хто заробить найбільше, забирає всі внески',
       colors: ['#0EA5E9', '#1E3A8A'] as const,
       emoji: '🏆',
       action: () => onNavigate('tournaments'),
@@ -75,11 +75,11 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
       action: () => onOpenGame('diamond-jackpot'),
     },
     {
-      title: 'Нове: Фруктова лавина',
-      text: 'Каскади, бомби-множники до ×100 і «Купити бонус»',
-      colors: ['#22C55E', '#14532D'] as const,
-      emoji: '🍉',
-      action: () => onOpenGame('fruit-avalanche'),
+      title: 'Нове: Башта',
+      text: '9 сходинок, ліво чи право. 15 ₴ на вершині стають 7 296 ₴',
+      colors: ['#7C3AED', '#1E1B4B'] as const,
+      emoji: '🗼',
+      action: () => onOpenGame('tower'),
     },
     {
       title: 'Утримай і виграй',

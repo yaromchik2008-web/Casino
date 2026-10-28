@@ -18,7 +18,10 @@ export type GameKind =
   | 'coin'
   | 'tumble'
   | 'holdwin'
-  | 'dig';
+  | 'dig'
+  | 'tower'
+  | 'colorwheel'
+  | 'chicken';
 
 export type Category = 'popular' | 'new' | 'slots' | 'special' | 'jackpot' | 'fast' | 'table';
 
@@ -328,6 +331,39 @@ export const GAMES: GameInfo[] = [
     kind: 'coin',
     categories: ['fast'],
     description: 'Орел чи решка? Виграш ×1.88.',
+  },
+  {
+    id: 'tower',
+    music: 'lobby',
+    title: 'Башта',
+    emoji: '🗼',
+    colors: ['#7C3AED', '#1E1B4B'],
+    kind: 'tower',
+    categories: ['fast', 'new', 'popular'],
+    tag: 'NEW',
+    description: '9 сходинок: на кожній ліва і права плита, одна провалюється. Кожна сходинка подвоює виграш, ставка 15 ₴ на вершині дає 7 296 ₴.',
+  },
+  {
+    id: 'color-wheel',
+    music: 'lobby',
+    title: 'Колесо кольорів',
+    emoji: '🔴',
+    colors: ['#DC2626', '#111827'],
+    kind: 'colorwheel',
+    categories: ['fast', 'new'],
+    tag: 'NEW',
+    description: 'Без цифр, лише кольори: червоне і чорне ×2, зелене ×14.',
+  },
+  {
+    id: 'chicken',
+    music: 'lobby',
+    title: 'Курячий перехід',
+    emoji: '🐔',
+    colors: ['#F59E0B', '#334155'],
+    kind: 'chicken',
+    categories: ['fast', 'new', 'popular'],
+    tag: 'NEW',
+    description: 'Веди курку через 15 смуг. Кожна смуга збільшує множник, але машина може збити. Встигни забрати!',
   },
   {
     id: 'wheel',

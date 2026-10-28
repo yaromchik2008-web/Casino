@@ -192,6 +192,7 @@ export function FriendsScreen() {
   const [chat, setChat] = useState<Profile | null>(null);
   const [duels, setDuels] = useState<Duel[]>([]);
   const [playing, setPlaying] = useState<Duel | null>(null);
+  const autoOpened = useRef(new Set<number>());
 
   const refresh = useCallback(() => {
     listFriends()
@@ -202,7 +203,20 @@ export function FriendsScreen() {
   // Дуелі оновлюються частіше, а виграш чи повернення ставки зараховується одразу.
   const refreshDuels = useCallback(() => {
     listDuels()
-      .then(setDuels)
+      .then((list) => {
+        setDuels(list);
+        // Друг прийняв мій виклик: гра починається одразу.
+        const uid = myProfile()?.id;
+        const ready = list.find(
+          (d) => d.challenger === uid && d.status === 'accepted' && d.challenger_score == null && !autoOpened.current.has(d.id),
+        );
+        if (ready) {
+          autoOpened.current.add(ready.id);
+          setChat(null);
+          setPlaying((cur) => cur ?? ready);
+          sfx('bonus');
+        }
+      })
       .catch(() => {});
     claimTransfers()
       .then((got) => {

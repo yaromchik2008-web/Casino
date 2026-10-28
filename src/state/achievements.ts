@@ -32,6 +32,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     title: 'Статус «Мільйонер»',
     icon: '👑',
     reward: 1000 * UAH,
-    done: (s) => s.balance + assetsValue(s.owned) >= STATUSES[4].min,
+    done: (s) => s.balance + assetsValue(s.owned) >= STATUSES.find((x) => x.title === 'Мільйонер')!.min,
   },
 ];

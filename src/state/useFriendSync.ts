@@ -2,13 +2,13 @@ import { useEffect, useRef } from 'react';
 import { friendsEnabled } from '../config';
 import { telegramName } from '../telegram';
 import { formatCoins } from '../theme';
-import { claimTransfers, startFriends, syncProfile } from './friends';
+import { claimTransfers, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
 import { assetsValue, statusFor } from './shop';
 import { useWallet } from './WalletContext';
 
 const SYNC_MS = 30000;
 
-/** Раз на 30 секунд показує друзям мій рахунок і забирає надіслані мені гроші. */
+/** Раз на 30 секунд показує друзям мій рахунок, оновлює очки турніру і забирає надіслані мені гроші. */
 export function useFriendSync() {
   const wallet = useWallet();
   const ref = useRef(wallet);
@@ -23,10 +23,11 @@ export function useFriendSync() {
         const s = ref.current.state;
         const status = statusFor(s.balance + assetsValue(s.owned));
         await syncProfile({ balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}` });
+        if (s.tourney && s.tourney.round === tourneyRound()) await reportTourney(s.tourney.round, s.tourney.net).catch(() => {});
         const got = await claimTransfers();
         if (got > 0 && !stopped) {
           ref.current.credit(got);
-          ref.current.notify(`👥 Друг надіслав тобі ${formatCoins(got)}`);
+          ref.current.notify(`👥 Зараховано ${formatCoins(got)}: подарунок, дуель або турнір`);
         }
       } catch {
         // Без мережі просто пропускаємо цей раз.

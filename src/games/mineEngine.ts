@@ -136,3 +136,20 @@ export function strike(blocks: Block[], i: number, power: number): StrikeResult 
   }
   return { blocks: next, broken, value, exploded };
 }
+
+/** Куди б'є кирка сама: найвигідніший доступний блок за кількістю ударів (як у симуляції RTP). */
+export function autoTarget(blocks: Block[], power: number, rand: () => number = Math.random): number {
+  let best = -1;
+  let score = -1;
+  blocks.forEach((b, i) => {
+    if (b.broken || !reachable(blocks, i)) return;
+    const hits = Math.ceil(b.hp / power);
+    const v = blockValue(b) + (b.type === 'tnt' ? 0.05 : 0) + (0.003 * Math.floor(i / MINE_COLS)) / hits;
+    const s = v / hits + rand() * 0.001;
+    if (s > score) {
+      score = s;
+      best = i;
+    }
+  });
+  return best;
+}

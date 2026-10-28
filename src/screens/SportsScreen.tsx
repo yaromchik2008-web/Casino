@@ -71,7 +71,16 @@ export function SportsScreen() {
   const live = filter(liveMatches(now));
   const validPicks = picks.filter((p) => getMatch(p.matchId).kickoff > now);
   const totalOdds = Math.round(validPicks.reduce((x, p) => x * p.odds, 1) * 100) / 100;
-  const open = wallet.state.sportBets.filter((b) => b.status === 'open').length;
+  const openBets = wallet.state.sportBets.filter((b) => b.status === 'open');
+  const open = openBets.length;
+  // Матчі, на які я поставив: що саме і скільки.
+  const myStakes: Record<string, { markets: string[]; stake: number }> = {};
+  for (const b of openBets)
+    for (const p of b.picks) {
+      const e = (myStakes[p.matchId] ??= { markets: [], stake: 0 });
+      e.markets.push(marketLabel(getMatch(p.matchId), p.market));
+      e.stake += b.stake;
+    }
 
   const toggle = (m: Match, market: Market) => {
     const odds = m.odds[market]!;
@@ -144,16 +153,44 @@ export function SportsScreen() {
 
         {tab === 'live' && (
           <>
-            {live.length === 0 && <Text style={styles.hint}>Зараз немає матчів. Найближчі стартують за хвилину-дві.</Text>}
-            {live.map((m) => (
-              <Panel key={m.id} style={styles.card}>
-                <LeagueBadge m={m} />
-                <Text style={styles.teams}>
-                  {m.home} — {m.away}
-                </Text>
-                <Score m={m} now={now} />
+            {openBets.length > 0 && (
+              <Panel style={[styles.card, styles.pinned]}>
+                <Text style={styles.pinTitle}>📌 Мої ставки в грі ({openBets.length})</Text>
+                {openBets.map((b) => (
+                  <View key={b.id} style={styles.pinRow}>
+                    <Text style={styles.pickLine}>
+                      {b.picks
+                        .map((p) => {
+                          const m = getMatch(p.matchId);
+                          const st = liveState(m, now);
+                          return `${st.started ? '🔴' : '🕒'} ${m.home} — ${m.away}${st.started ? ` ${st.home}:${st.away}` : ''} · ${marketLabel(m, p.market)}`;
+                        })
+                        .join('\n')}
+                    </Text>
+                    <Text style={styles.betMoney}>
+                      Поставив {formatCoins(b.stake)} · можливий виграш {formatCoins(Math.floor(b.stake * b.odds))}
+                    </Text>
+                  </View>
+                ))}
               </Panel>
-            ))}
+            )}
+            {live.length === 0 && <Text style={styles.hint}>Зараз немає матчів. Найближчі стартують за хвилину-дві.</Text>}
+            {[...live]
+              .sort((a, b) => Number(!!myStakes[b.id]) - Number(!!myStakes[a.id]))
+              .map((m) => (
+                <Panel key={m.id} style={[styles.card, myStakes[m.id] && styles.pinned]}>
+                  <LeagueBadge m={m} />
+                  <Text style={styles.teams}>
+                    {m.home} — {m.away}
+                  </Text>
+                  <Score m={m} now={now} />
+                  {myStakes[m.id] && (
+                    <Text style={styles.myStake}>
+                      🎫 Твоя ставка: {myStakes[m.id].markets.join(', ')} · {formatCoins(myStakes[m.id].stake)}
+                    </Text>
+                  )}
+                </Panel>
+              ))}
           </>
         )}
 
@@ -245,6 +282,10 @@ const styles = StyleSheet.create({
   oddValue: { color: colors.text, fontSize: 15, fontWeight: '900' },
   oddTextActive: { color: colors.bg },
   live: { gap: 4 },
+  pinned: { borderColor: colors.gold, borderWidth: 2 },
+  pinTitle: { color: colors.gold, fontWeight: '900', fontSize: 14 },
+  pinRow: { gap: 2, paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.border },
+  myStake: { color: colors.gold, fontWeight: '800', fontSize: 13 },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   liveDot: { fontSize: 12 },
   liveTime: { color: colors.red, fontWeight: '900', flex: 1 },

@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { sfx } from '../audio/sound';
+import { getSettings, sfx } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
 import { BetSelector, BigButton, Panel, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
@@ -12,20 +12,30 @@ import {
   MINE_COLS,
   PICKAXES,
   STRIKES,
+  autoTarget,
   blockValue,
   generateMine,
   reachable,
   strike,
 } from './mineEngine';
 
+// Візерунок «пікселів» для кожного блока свій, але стабільний між рендерами.
+function specks(seed: number) {
+  let x = (seed * 9301 + 49297) % 233280;
+  const next = () => (x = (x * 9301 + 49297) % 233280) / 233280;
+  return Array.from({ length: 6 }, () => ({ l: next() * 0.75, t: next() * 0.75, s: 0.14 + next() * 0.12 }));
+}
+
 function BlockView({
   block,
+  index,
   size,
   canHit,
   onPress,
   shakeKey,
 }: {
   block: Block;
+  index: number;
   size: number;
   canHit: boolean;
   onPress: () => void;
@@ -41,7 +51,8 @@ function BlockView({
   }
   if (block.broken) return <View style={[styles.cave, { width: size, height: size }]} />;
   const damage = 1 - block.hp / info.hp;
-  const px = size / 4;
+  const ore = info.value > 0 || block.type === 'coal';
+  const depth = Math.floor(index / MINE_COLS);
   return (
     <Pressable onPress={onPress} disabled={!canHit}>
       <Animated.View
@@ -51,18 +62,33 @@ function BlockView({
             width: size,
             height: size,
             backgroundColor: info.color,
-            opacity: canHit ? 1 : 0.55,
             transform: [{ translateX: shake.interpolate({ inputRange: [0, 1], outputRange: [0, 5] }) }],
           },
         ]}
       >
-        {/* «Пікселі» текстури: кілька темніших квадратиків */}
-        <View style={[styles.px, { width: px, height: px, left: px * 0.4, top: px * 0.5, backgroundColor: info.dark }]} />
-        <View style={[styles.px, { width: px, height: px, left: px * 2.4, top: px * 1.6, backgroundColor: info.dark }]} />
-        <View style={[styles.px, { width: px * 0.8, height: px * 0.8, left: px * 1.2, top: px * 2.6, backgroundColor: info.dark }]} />
-        {info.icon ? <Text style={{ fontSize: size * 0.42 }}>{info.icon}</Text> : null}
+        {specks(index * 7 + depth).map((p, k) => (
+          <View
+            key={k}
+            style={[
+              styles.px,
+              {
+                left: p.l * size,
+                top: p.t * size,
+                width: p.s * size * (ore ? 1.25 : 1),
+                height: p.s * size * (ore ? 1.25 : 1),
+                backgroundColor: ore || k % 2 ? info.dark : 'rgba(0,0,0,0.18)',
+                borderRadius: ore ? 2 : 0,
+              },
+            ]}
+          />
+        ))}
+        {block.type === 'tnt' && <View style={[styles.tntBand, { top: size * 0.38, height: size * 0.24 }]} />}
+        {info.icon && (block.type === 'chest' || block.type === 'tnt' || block.type === 'diamond') ? (
+          <Text style={{ fontSize: size * 0.4 }}>{info.icon}</Text>
+        ) : null}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Math.min(0.35, depth * 0.02) + (canHit ? 0 : 0.3)})` }]} />
         {damage > 0 && (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${damage * 0.45})` }]}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${damage * 0.35})` }]}>
             <Text style={[styles.crack, { fontSize: size * 0.5 }]}>{damage > 0.6 ? '💢' : '⚡'}</Text>
           </View>
         )}
@@ -71,10 +97,49 @@ function BlockView({
   );
 }
 
+// Кирка, що сама стрибає на блок і б'є.
+function FlyingPick({ x, y, size, hitKey }: { x: number; y: number; size: number; hitKey: number }) {
+  const jump = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (getSettings().lite) return;
+    jump.setValue(0);
+    Animated.timing(jump, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+  }, [hitKey, jump]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.pick,
+        {
+          width: size,
+          height: size,
+          transform: [
+            { translateX: x + size * 0.35 },
+            { translateY: jump.interpolate({ inputRange: [0, 0.5, 1], outputRange: [y - size * 0.9, y - size * 0.25, y - size * 0.45] }) },
+            { rotate: jump.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-50deg', '35deg', '0deg'] }) },
+          ],
+        },
+      ]}
+    >
+      <Text style={{ fontSize: size * 0.62 }}>⛏️</Text>
+    </Animated.View>
+  );
+}
+
 // У дуелі всі грають дерев'яною киркою і віртуальною ставкою, очки = знайдене × 1000.
 export const DUEL_MINE_BET = 1000;
 
-export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: number) => void }) {
+export function MineGame({
+  game,
+  duel,
+  onProgress,
+  autoStart,
+}: {
+  game: GameInfo;
+  duel?: (points: number) => void;
+  onProgress?: (points: number) => void;
+  autoStart?: boolean;
+}) {
   const wallet = useWallet();
   const { width } = useWindowDimensions();
   const [bet, setBet] = useState(100);
@@ -83,6 +148,9 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
   const [runValue, setRunValue] = useState(0);
   const [runBet, setRunBet] = useState(0);
   const [shakes, setShakes] = useState<Record<number, number>>({});
+  const [auto, setAuto] = useState(true);
+  const [target, setTarget] = useState(-1);
+  const [hitKey, setHitKey] = useState(0);
   const [message, setMessage] = useState({ text: 'Копай глибше: там цінніша руда', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const pick = duel ? PICKAXES[0] : PICKAXES[wallet.state.pickaxe];
   const nextPick = PICKAXES[wallet.state.pickaxe + 1];
@@ -96,6 +164,8 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
       setStrikes(STRIKES);
       setRunValue(0);
       setRunBet(DUEL_MINE_BET);
+      setTarget(-1);
+      setAuto(true);
       setMessage({ text: `Дуель: ${STRIKES} ударів, хто знайде більше`, tone: 'neutral' });
       return;
     }
@@ -107,7 +177,9 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
     setStrikes(STRIKES);
     setRunValue(0);
     setRunBet(bet);
-    setMessage({ text: `${STRIKES} ударів. Тапай по блоках!`, tone: 'neutral' });
+    setTarget(-1);
+    setAuto(true);
+    setMessage({ text: `${STRIKES} ударів. Кирка копає сама, тапни блок, щоб змінити ціль`, tone: 'neutral' });
   };
 
   const finish = async (value: number) => {
@@ -128,6 +200,8 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
 
   const hit = (i: number) => {
     if (!blocks || strikes <= 0 || !reachable(blocks, i)) return;
+    setTarget(i);
+    setHitKey((k) => k + 1);
     const r = strike(blocks, i, pick.power);
     setShakes((s) => ({ ...s, [i]: (s[i] ?? 0) + 1 }));
     setBlocks(r.blocks);
@@ -137,6 +211,7 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
     if (r.broken.length) {
       value += r.value;
       setRunValue(value);
+      onProgress?.(Math.round(value * runBet));
       if (r.exploded) {
         sfx('bomb');
         haptic('win');
@@ -157,6 +232,26 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
     }
     if (left <= 0) setTimeout(() => finish(value), 500);
   };
+
+  useEffect(() => {
+    if (autoStart) start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Автокопання: кирка сама обирає блок і б'є, поки є удари. Тап по блоку змінює ціль.
+  useEffect(() => {
+    if (!blocks || strikes <= 0 || !auto) return;
+    const t = setTimeout(() => {
+      const keep = target >= 0 && !blocks[target].broken && reachable(blocks, target);
+      const next = keep ? target : autoTarget(blocks, pick.power);
+      if (next >= 0) hit(next);
+    }, getSettings().fastSpin ? 220 : 380);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, strikes, auto]);
+
+  const gap = 2;
+  const pickPos = target >= 0 ? { x: (target % MINE_COLS) * (size + gap), y: Math.floor(target / MINE_COLS) * (size + gap) } : null;
 
   return (
     <View style={styles.root}>
@@ -184,14 +279,19 @@ export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: numbe
               <BlockView
                 key={i}
                 block={b}
+                index={i}
                 size={size}
                 canHit={strikes > 0 && reachable(blocks, i)}
-                onPress={() => hit(i)}
+                onPress={() => (auto ? setTarget(i) : hit(i))}
                 shakeKey={shakes[i] ?? 0}
               />
             ))}
+            {pickPos && strikes > 0 && <FlyingPick x={pickPos.x} y={pickPos.y} size={size} hitKey={hitKey} />}
           </View>
-          <BigButton label="ЗАБРАТИ ЗНАХІДКИ" color={colors.accent} onPress={() => finish(runValue)} />
+          <View style={styles.btnRow}>
+            <BigButton label={auto ? '⏸ ПАУЗА' : '▶ АВТО'} color={colors.blue} onPress={() => setAuto(!auto)} style={styles.half} />
+            <BigButton label="ЗАБРАТИ" color={colors.accent} onPress={() => finish(runValue)} style={styles.half} />
+          </View>
         </View>
       ) : duel ? (
         <BigButton label="ПОЧАТИ ДУЕЛЬ" onPress={start} />
@@ -247,10 +347,23 @@ const styles = StyleSheet.create({
   mine: { gap: 10, alignItems: 'center' },
   grass: { height: 10, alignSelf: 'stretch', backgroundColor: '#4CAF50', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, justifyContent: 'center', marginTop: -10 },
-  block: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(0,0,0,0.25)' },
+  block: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderTopColor: 'rgba(255,255,255,0.28)',
+    borderLeftColor: 'rgba(255,255,255,0.18)',
+    borderRightColor: 'rgba(0,0,0,0.35)',
+    borderBottomColor: 'rgba(0,0,0,0.45)',
+  },
   px: { position: 'absolute' },
+  tntBand: { position: 'absolute', left: 0, right: 0, backgroundColor: '#F5F5F5' },
+  pick: { position: 'absolute', left: 0, top: 0, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
+  btnRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
+  half: { flex: 1 },
   crack: { position: 'absolute', alignSelf: 'center', top: '22%', opacity: 0.85 },
-  cave: { backgroundColor: '#1A1410' },
+  cave: { backgroundColor: '#140F0B', borderWidth: 1, borderColor: '#0A0705' },
   upgrade: { gap: 6 },
   upTitle: { color: colors.gold, fontWeight: '900', fontSize: 15, marginBottom: 4 },
   upRow: { color: colors.text, fontSize: 13 },
