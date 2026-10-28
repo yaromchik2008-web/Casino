@@ -351,6 +351,13 @@ export async function lastTourneyResult(): Promise<TourneyResult | null> {
 }
 
 /** Прив'язує Telegram до акаунта, щоб бот міг надсилати сповіщення. Сервер перевіряє підпис initData. */
+/** Посилання на оплату пакета зірками (docs/supabase-v9.sql + функція бота). */
+export async function createStarsInvoice(pack: string): Promise<string> {
+  const { data, error } = await db().functions.invoke('tg', { body: { action: 'invoice', pack } });
+  if (error || !data?.ok || !data.link) throw new Error('invoice');
+  return data.link as string;
+}
+
 export async function linkTelegram(initData: string) {
   if (!me || !initData) return;
   await db().functions.invoke('tg', { body: { action: 'link', initData } });

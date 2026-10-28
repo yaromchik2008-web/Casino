@@ -19,6 +19,42 @@ const cors = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Пакети ігрових ₴ за Telegram Stars (той самий список у src/state/stars.ts).
+const PACKS: Record<string, { stars: number; amount: number; title: string }> = {
+  s15: { stars: 15, amount: 100_000, title: '1 000 ігрових ₴' },
+  s50: { stars: 50, amount: 400_000, title: '4 000 ігрових ₴' },
+  s150: { stars: 150, amount: 1_500_000, title: '15 000 ігрових ₴' },
+  s500: { stars: 500, amount: 6_000_000, title: '60 000 ігрових ₴' },
+};
+
+async function tgApi(method: string, payload: unknown) {
+  const res = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!json.ok) console.log('telegram error', method, JSON.stringify(json));
+  return json;
+}
+
+// Оплата пройшла: записуємо платіж один раз і зараховуємо ігрові ₴ через transfers.
+async function onPaid(pay: { telegram_payment_charge_id: string; invoice_payload: string; total_amount: number }) {
+  const [userId, packId] = String(pay.invoice_payload).split(':');
+  const pack = PACKS[packId];
+  if (!pack || pay.total_amount !== pack.stars) return console.log('bad payment', pay.invoice_payload, pay.total_amount);
+  const ins = await admin.from('purchases').insert({
+    charge_id: pay.telegram_payment_charge_id,
+    user_id: userId,
+    pack: packId,
+    stars: pay.total_amount,
+    amount: pack.amount,
+  });
+  if (ins.error) return console.log('purchase skip', ins.error.message);
+  await admin.from('transfers').insert({ sender: null, receiver: userId, amount: pack.amount });
+  console.log('paid', userId, packId);
+}
+
 const money = (kop: number) => `${(kop / 100).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
 
 async function hmac(key: ArrayBuffer | Uint8Array, data: string) {
@@ -107,10 +143,36 @@ Deno.serve(async (req) => {
         console.log('webhook secret mismatch');
         return new Response('forbidden', { status: 403 });
       }
+      if (body.pre_checkout_query) {
+        const q = body.pre_checkout_query;
+        const pack = PACKS[String(q.invoice_payload).split(':')[1]];
+        await tgApi('answerPreCheckoutQuery', pack && q.total_amount === pack.stars
+          ? { pre_checkout_query_id: q.id, ok: true }
+          : { pre_checkout_query_id: q.id, ok: false, error_message: 'Пакет не знайдено, спробуй ще раз' });
+        return new Response('ok');
+      }
       const msg = body.message;
+      if (msg?.successful_payment) {
+        await onPaid(msg.successful_payment);
+        return new Response('ok');
+      }
       const text = String(msg?.text ?? '');
       if (msg?.chat?.type === 'private' && text.startsWith('/start')) await onStart(msg.chat.id, text.split(' ')[1] ?? '');
       return new Response('ok');
+    }
+    if (body.action === 'invoice') {
+      const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
+      const { data } = await admin.auth.getUser(jwt);
+      const pack = PACKS[String(body.pack)];
+      if (!data.user || !pack) return new Response(JSON.stringify({ ok: false }), { status: 400, headers: cors });
+      const r = await tgApi('createInvoiceLink', {
+        title: pack.title,
+        description: `${pack.title} для Casino Victor. Ігрові гривні не можна вивести чи обміняти на справжні гроші.`,
+        payload: `${data.user.id}:${body.pack}:${Date.now()}`,
+        currency: 'XTR',
+        prices: [{ label: pack.title, amount: pack.stars }],
+      });
+      return new Response(JSON.stringify({ ok: !!r.ok, link: r.result }), { headers: cors });
     }
     if (body.action === 'link') {
       const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');

@@ -7,6 +7,7 @@ import { BigButton, Panel, haptic } from '../components/ui';
 import { formatDuration, useNow } from '../components/useNow';
 import { MISSIONS, dayId } from '../state/progress';
 import { InvitePanel } from './InvitePanel';
+import { StarsPanel } from './StarsPanel';
 import {
   DAILY_REWARDS,
   HOURLY_BONUS,
@@ -79,6 +80,7 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
       <BigButton label="🏆 ТУРНІРИ І ЛІДЕРИ" color={colors.blue} onPress={onOpenTournaments} />
 
       <InvitePanel />
+      <StarsPanel />
 
       <Panel style={styles.panel}>
         <Text style={styles.cardTitle}>🎟️ Промокод</Text>

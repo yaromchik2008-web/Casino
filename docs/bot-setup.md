@@ -32,3 +32,9 @@ Supabase → **Edge Functions** → **Secrets** → **Add new secret**:
    `https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://kkujedghuxgtxmsbquqc.supabase.co/functions/v1/tg&secret_token=<СЛОВО>`
    Має з'явитися `"ok":true` і `Webhook was set`.
 4. Перевір: напиши боту `/start`, він має відповісти кнопкою «🎰 Грати в Casino Victor».
+
+## 6. Поповнення за Telegram Stars
+1. SQL Editor → встав `docs/supabase-v9.sql` → **Run** (таблиця покупок).
+2. Онови код функції `tg` новим текстом з `supabase/functions/tg/index.ts` → **Deploy**.
+3. Вебхук з кроку 5 має бути вже налаштований. Більше нічого не треба: Stars не потребують платіжного провайдера.
+Гроші за зірки приходять на баланс бота в Telegram (@BotFather → бот → Balance). Ігрові ₴ не можна виводити чи обмінювати на справжні гроші.

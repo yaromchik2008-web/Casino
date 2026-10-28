@@ -6,6 +6,7 @@ interface TelegramWebApp {
   initData: string;
   initDataUnsafe: { user?: { first_name?: string; last_name?: string; username?: string }; start_param?: string };
   openTelegramLink?: (url: string) => void;
+  openInvoice?: (url: string, cb: (status: 'paid' | 'cancelled' | 'failed' | 'pending') => void) => void;
   ready: () => void;
   expand: () => void;
   isVersionAtLeast: (v: string) => boolean;
@@ -80,6 +81,17 @@ export function telegramShare(url: string, text: string): boolean {
   if (!tg?.openTelegramLink) return false;
   tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
   return true;
+}
+
+/** Відкриває оплату в Telegram; повертає статус або null, якщо не в Telegram. */
+export function telegramPay(url: string): Promise<string | null> {
+  const tg = current();
+  if (!tg?.openInvoice || !tg.isVersionAtLeast('6.1')) return Promise.resolve(null);
+  return new Promise((resolve) => tg.openInvoice!(url, (status) => resolve(status)));
+}
+
+export function inTelegram(): boolean {
+  return !!current();
 }
 
 export function telegramInitData(): string {
