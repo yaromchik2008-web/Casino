@@ -77,7 +77,7 @@ export function BetSelector({
             onChangeText={setText}
             onSubmitEditing={apply}
             keyboardType="decimal-pad"
-            placeholder="0,15"
+            placeholder="1"
             placeholderTextColor={colors.muted}
             style={styles.input}
           />

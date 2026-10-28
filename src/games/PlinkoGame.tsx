@@ -19,7 +19,7 @@ function bucketColor(m: number) {
 
 export function PlinkoGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [width, setWidth] = useState(320);
   const [ball, setBall] = useState<{ row: number; pos: number } | null>(null);
   const [lastBucket, setLastBucket] = useState<number | null>(null);

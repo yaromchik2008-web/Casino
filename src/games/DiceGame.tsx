@@ -7,7 +7,7 @@ import { GameInfo } from './catalog';
 
 export function DiceGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [target, setTarget] = useState(50);
   const [over, setOver] = useState(true);
   const [roll, setRoll] = useState<number | null>(null);

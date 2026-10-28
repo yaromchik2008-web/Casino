@@ -17,7 +17,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
   const settings = useSettings();
   const { width } = useWindowDimensions();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [grid, setGrid] = useState<TGrid>(() => randomTGrid(config));
   const [remove, setRemove] = useState<boolean[][] | null>(null);
   const [busy, setBusy] = useState(false);

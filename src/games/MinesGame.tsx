@@ -17,7 +17,7 @@ export function minesMultiplier(mines: number, opened: number): number {
 
 export function MinesGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [mines, setMines] = useState(3);
   const [board, setBoard] = useState<boolean[]>([]); // true = міна
   const [opened, setOpened] = useState<boolean[]>(Array(SIZE).fill(false));

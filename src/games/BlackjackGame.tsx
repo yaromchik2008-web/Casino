@@ -26,7 +26,7 @@ type Phase = 'bet' | 'play' | 'done';
 
 export function BlackjackGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [stake, setStake] = useState(0);
   const [deck, setDeck] = useState<Card[]>(() => newDeck(6));
   const [player, setPlayer] = useState<Card[]>([]);

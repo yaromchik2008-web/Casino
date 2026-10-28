@@ -9,7 +9,7 @@ const PAYOUT = 1.88;
 
 export function CoinGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [choice, setChoice] = useState<'heads' | 'tails'>('heads');
   const [side, setSide] = useState<'heads' | 'tails'>('heads');
   const [busy, setBusy] = useState(false);

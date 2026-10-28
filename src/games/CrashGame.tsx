@@ -14,7 +14,7 @@ function crashPoint() {
 
 export function CrashGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [autoCash, setAutoCash] = useState(2);
   const [multiplier, setMultiplier] = useState(1);
   const [running, setRunning] = useState(false);

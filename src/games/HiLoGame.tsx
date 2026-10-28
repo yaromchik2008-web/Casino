@@ -23,7 +23,7 @@ function randomCard(): Card {
 
 export function HiLoGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [card, setCard] = useState<Card>(randomCard);
   const [trail, setTrail] = useState<Card[]>([]);
   const [active, setActive] = useState(false);

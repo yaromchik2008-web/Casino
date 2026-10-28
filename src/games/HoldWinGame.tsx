@@ -64,7 +64,7 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
   const settings = useSettings();
   const { width } = useWindowDimensions();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [cells, setCells] = useState<BaseCell[][]>(() =>
     spinGrid(config).map((col) => col.map((sym) => ({ sym, coin: null }))),
   );

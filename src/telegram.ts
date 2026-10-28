@@ -4,7 +4,8 @@ import { colors } from './theme';
 // Мінімальний опис Telegram Mini App API, який ми використовуємо.
 interface TelegramWebApp {
   initData: string;
-  initDataUnsafe: { user?: { first_name?: string; username?: string } };
+  initDataUnsafe: { user?: { first_name?: string; username?: string }; start_param?: string };
+  openTelegramLink?: (url: string) => void;
   ready: () => void;
   expand: () => void;
   isVersionAtLeast: (v: string) => boolean;
@@ -66,6 +67,19 @@ export function initTelegram(onReady: () => void) {
 
 export function isTelegram(): boolean {
   return !!current();
+}
+
+/** Параметр з посилання t.me/бот?startapp=..., наприклад ref_K7Q2MX. */
+export function telegramStartParam(): string | undefined {
+  return current()?.initDataUnsafe.start_param;
+}
+
+/** Відкриває вибір чату в Telegram, щоб поділитися посиланням. false, якщо ми не в Telegram. */
+export function telegramShare(url: string, text: string): boolean {
+  const tg = current();
+  if (!tg?.openTelegramLink) return false;
+  tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
+  return true;
 }
 
 export function telegramInitData(): string {

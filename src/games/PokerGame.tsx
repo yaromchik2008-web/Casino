@@ -45,7 +45,7 @@ export function evaluatePoker(cards: Card[]): number {
 
 export function PokerGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(25);
+  const [bet, setBet] = useState(100);
   const [deck, setDeck] = useState<Card[]>([]);
   const [hand, setHand] = useState<Card[]>([]);
   const [held, setHeld] = useState<boolean[]>(Array(5).fill(false));
@@ -117,7 +117,7 @@ export function PokerGame({ game }: { game: GameInfo }) {
         <BigButton label="ЗАМІНИТИ" onPress={draw} color={colors.accent} />
       ) : (
         <>
-          <BetSelector value={bet} onChange={setBet} options={[5, 10, 25, 50, 100]} />
+          <BetSelector value={bet} onChange={setBet} options={[100, 200, 500, 1000, 2000]} />
           <BigButton label="РОЗДАТИ" onPress={deal} />
         </>
       )}

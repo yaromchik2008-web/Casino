@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BetSelector, BigButton, Chip, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
-import { colors, formatCoins } from '../theme';
+import { colors, formatCoins, formatShort } from '../theme';
 import { GameInfo } from './catalog';
 
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -39,7 +39,7 @@ function payoutFor(key: string, n: number): number {
 
 export function RouletteGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [chip, setChip] = useState(25);
+  const [chip, setChip] = useState(100);
   const [bets, setBets] = useState<Record<string, number>>({});
   const [spinning, setSpinning] = useState(false);
   const [shown, setShown] = useState<number | null>(null);
@@ -110,13 +110,13 @@ export function RouletteGame({ game }: { game: GameInfo }) {
 
       <Pressable onPress={() => place('n0')} style={[styles.zero, { backgroundColor: numberColor(0) }]}>
         <Text style={styles.numText}>0</Text>
-        {bets.n0 ? <Text style={styles.chipMark}>{bets.n0}</Text> : null}
+        {bets.n0 ? <Text style={styles.chipMark}>{formatShort(bets.n0)}</Text> : null}
       </Pressable>
       <View style={styles.grid}>
         {numbers.map((n) => (
           <Pressable key={n} onPress={() => place(`n${n}`)} style={[styles.num, { backgroundColor: numberColor(n) }]}>
             <Text style={styles.numText}>{n}</Text>
-            {bets[`n${n}`] ? <Text style={styles.chipMark}>{bets[`n${n}`]}</Text> : null}
+            {bets[`n${n}`] ? <Text style={styles.chipMark}>{formatShort(bets[`n${n}`])}</Text> : null}
           </Pressable>
         ))}
       </View>
@@ -125,7 +125,7 @@ export function RouletteGame({ game }: { game: GameInfo }) {
           <Pressable key={o.id} onPress={() => place(o.id)} style={styles.outsideCell}>
             <Text style={styles.outsideText}>{o.label}</Text>
             <Text style={styles.outsidePay}>×{o.payout}</Text>
-            {bets[o.id] ? <Text style={styles.chipMark}>{bets[o.id]}</Text> : null}
+            {bets[o.id] ? <Text style={styles.chipMark}>{formatShort(bets[o.id])}</Text> : null}
           </Pressable>
         ))}
       </View>

@@ -19,7 +19,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const config = game.slot!;
   const wallet = useWallet();
   const { width } = useWindowDimensions();
-  const [bet, setBet] = useState(25);
+  const [bet, setBet] = useState(100);
   const [grid, setGrid] = useState<Grid>(() => spinGrid(config));
   const [spinning, setSpinning] = useState<boolean[]>(Array(config.reels).fill(false));
   const [highlight, setHighlight] = useState<boolean[][]>([]);

@@ -55,7 +55,7 @@ export function dealBaccarat(deck: Card[]) {
 
 export function BaccaratGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [side, setSide] = useState<Side>('player');
   const [round, setRound] = useState<ReturnType<typeof dealBaccarat> | null>(null);
   const [message, setMessage] = useState({ text: 'На кого ставиш?', tone: 'neutral' as 'win' | 'lose' | 'neutral' });

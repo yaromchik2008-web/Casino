@@ -31,7 +31,7 @@ function pick() {
 
 export function WheelGame({ game }: { game: GameInfo }) {
   const wallet = useWallet();
-  const [bet, setBet] = useState(50);
+  const [bet, setBet] = useState(100);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState({ text: 'Крути і лови множник до ×50', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const spinner = useRef<StripSpinnerHandle>(null);

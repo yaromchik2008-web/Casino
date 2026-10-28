@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
-import { SUPABASE_ANON_KEY, SUPABASE_URL, friendsEnabled } from '../config';
+import { BOT_USERNAME, SUPABASE_ANON_KEY, SUPABASE_URL, WEB_URL, friendsEnabled } from '../config';
 import { cloudGet, cloudSet, telegramInitData, waitTelegram } from '../telegram';
 
 const CLOUD_KEY = 'sb_refresh';
@@ -100,12 +100,17 @@ const ERRORS: Record<string, string> = {
   too_many_duels: 'Забагато відкритих дуелей (до 10)',
   duels_check: 'Ставка від 1 до 10 000 ₴',
   already_joined: 'Ти вже в цьому турнірі',
+  already_referred: 'Ти вже отримав бонус за запрошення',
+  referral_too_late: 'Код друга можна ввести лише в перші 7 днів гри',
+  referral_limit: 'Цей друг уже запросив максимум гравців',
 };
 
 export function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
   for (const k of Object.keys(ERRORS)) if (msg.includes(k)) return ERRORS[k];
   if (msg.toLowerCase().includes('anonymous')) return 'На сервері не ввімкнено анонімний вхід';
+  if (/referral/.test(msg) && (msg.includes('schema cache') || msg.includes('Could not find') || msg.includes('does not exist')))
+    return 'На сервері ще не запущено SQL з docs/supabase-v5.sql';
   if (/tourney|leaderboard|settle|rank/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
     return 'На сервері ще не запущено SQL з docs/supabase-v3.sql';
   if (msg.includes('duel') && (msg.includes('schema cache') || msg.includes('does not exist')))
@@ -326,4 +331,21 @@ export async function lastTourneyResult(): Promise<TourneyResult | null> {
 export async function linkTelegram(initData: string) {
   if (!me || !initData) return;
   await db().functions.invoke('tg', { body: { action: 'link', initData } });
+}
+
+/** Бонус за запрошення: обидва отримують по 200 ₴. Повертає ім'я того, хто запросив. */
+export async function claimReferral(code: string): Promise<string> {
+  const { data, error } = await db().rpc('claim_referral', { p_code: code.trim().toUpperCase() });
+  if (error) throw error;
+  return String(data ?? 'Друг');
+}
+
+export async function myReferrals(): Promise<number> {
+  const { data, error } = await db().rpc('my_referrals');
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+export function inviteLink(code: string) {
+  return BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?startapp=ref_${code}` : `${WEB_URL}?ref=${code}`;
 }

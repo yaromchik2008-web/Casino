@@ -6,6 +6,7 @@ import { StripItem, StripSpinner, StripSpinnerHandle } from '../components/Strip
 import { BigButton, Panel, haptic } from '../components/ui';
 import { formatDuration, useNow } from '../components/useNow';
 import { MISSIONS, dayId } from '../state/progress';
+import { InvitePanel } from './InvitePanel';
 import {
   DAILY_REWARDS,
   HOURLY_BONUS,
@@ -75,7 +76,9 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>🎁 Бонуси</Text>
 
-      <BigButton label="🏆 ТИЖНЕВИЙ ТУРНІР" color={colors.blue} onPress={onOpenTournaments} />
+      <BigButton label="🏆 ТУРНІРИ І ЛІДЕРИ" color={colors.blue} onPress={onOpenTournaments} />
+
+      <InvitePanel />
 
       <Panel style={styles.panel}>
         <Text style={styles.cardTitle}>🎟️ Промокод</Text>
