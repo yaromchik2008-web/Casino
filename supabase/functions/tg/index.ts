@@ -13,7 +13,8 @@ const GAMES: Record<string, string> = {
 };
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const money = (kop: number) => `${(kop / 100).toLocaleString('uk-UA', { maximumFractionDigits: 2 })} ₴`;
@@ -40,8 +41,8 @@ async function verifyInitData(initData: string): Promise<number | null> {
 
 async function send(userId: string, text: string) {
   const { data } = await admin.from('tg_links').select('tg_id').eq('user_id', userId).maybeSingle();
-  if (!data || !BOT) return;
-  await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+  if (!data || !BOT) return console.log('skip send', { linked: !!data, token: !!BOT });
+  const res = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -50,6 +51,7 @@ async function send(userId: string, text: string) {
       reply_markup: { inline_keyboard: [[{ text: '🎰 Відкрити Casino Victor', web_app: { url: APP_URL } }]] },
     }),
   });
+  if (!res.ok) console.log('telegram error', await res.text());
 }
 
 async function nameOf(id: string) {
@@ -86,7 +88,11 @@ Deno.serve(async (req) => {
       const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
       const { data } = await admin.auth.getUser(jwt);
       const tgId = await verifyInitData(String(body.initData ?? ''));
-      if (!data.user || !tgId) return new Response(JSON.stringify({ ok: false }), { status: 400, headers: cors });
+      if (!data.user || !tgId) {
+        console.log('link failed', { user: !!data.user, tg: !!tgId, token: !!BOT });
+        return new Response(JSON.stringify({ ok: false }), { status: 400, headers: cors });
+      }
+      console.log('linked', data.user.id);
       await admin.from('tg_links').upsert({ user_id: data.user.id, tg_id: tgId, updated_at: new Date().toISOString() });
       return new Response(JSON.stringify({ ok: true }), { headers: cors });
     }
