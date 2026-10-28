@@ -61,6 +61,10 @@ function video(emojis: string[], wild: string, scatter: string, payScale?: numbe
   return { reels: 5, symbols: videoSymbols(emojis, wild, scatter, payScale), wild: 'wild', scatter: 'scatter' };
 }
 
+function reweight(cfg: SlotConfig, weights: number[]): SlotConfig {
+  return { ...cfg, symbols: cfg.symbols.map((sym, i) => (i < weights.length ? { ...sym, weight: weights[i] } : sym)) };
+}
+
 // Основна гра «Утримай і виграй»: без скатерів, бонус запускають монети (RTP ≈ 0.90, див. holdwinEngine).
 function holdwin(emojis: string[], wild: string): SlotConfig {
   const symbols = videoSymbols(emojis, wild, '', 0.95)
@@ -116,7 +120,8 @@ export const GAMES: GameInfo[] = [
     kind: 'slot',
     categories: ['new', 'popular', 'slots'],
     tag: 'NEW',
-    slot: video(['🟩', '⬜', '🚐', '🚗', '🟢', '🚘'], '🚓', '🛻'),
+    // Дешеві машини випадають частіше: виграш приблизно в кожному другому оберті (55%), RTP ≈ 0.9 (simA.ts).
+    slot: reweight(video(['🟩', '⬜', '🚐', '🚗', '🟢', '🚘'], '🚓', '🛻', 0.49), [40, 30, 16, 8, 5, 3]),
     art: CARS_ART,
     description: '5 барабанів з машинами: від «сімки» і Ланоса до Ікс 3. Поліція-wild замінює всіх, 3+ УАЗи дають фриспіни.',
   },

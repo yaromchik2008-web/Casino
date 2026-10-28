@@ -1,6 +1,6 @@
 // Майно за ігрові гривні. Суми в копійках. Назви загальні, без брендів.
 
-export type ItemCategory = 'phone' | 'car' | 'moto' | 'home' | 'business';
+export type ItemCategory = 'car' | 'moto' | 'home' | 'business';
 
 export interface ShopItem {
   id: string;
@@ -14,19 +14,22 @@ export interface ShopItem {
 
 const UAH = 100;
 
+// Телефони прибрали з магазину (за бажанням ghj). Куплені повертаються грошима за повну ціну.
+export const REMOVED_ITEMS: Record<string, number> = {
+  'phone-basic': 50 * UAH,
+  'phone-smart': 500 * UAH,
+  'phone-pro': 2500 * UAH,
+  'phone-fold': 6000 * UAH,
+};
+
 export const SHOP_CATEGORIES: { id: ItemCategory; label: string; icon: string }[] = [
   { id: 'home', label: 'Житло', icon: '🏠' },
   { id: 'car', label: 'Машини', icon: '🚗' },
   { id: 'moto', label: 'Мотоцикли', icon: '🏍️' },
-  { id: 'phone', label: 'Телефони', icon: '📱' },
   { id: 'business', label: 'Бізнес', icon: '🏢' },
 ];
 
 export const SHOP_ITEMS: ShopItem[] = [
-  { id: 'phone-basic', title: 'Кнопковий телефон', emoji: '☎️', category: 'phone', price: 50 * UAH },
-  { id: 'phone-smart', title: 'Смартфон', emoji: '📱', category: 'phone', price: 500 * UAH },
-  { id: 'phone-pro', title: 'Флагманський смартфон', emoji: '📲', category: 'phone', price: 2500 * UAH },
-  { id: 'phone-fold', title: 'Складаний смартфон', emoji: '🤳', category: 'phone', price: 6000 * UAH },
 
   { id: 'car-bike', title: 'Велосипед', emoji: '🚲', category: 'moto', price: 300 * UAH },
   { id: 'car-scooter', title: 'Скутер', emoji: '🛵', category: 'moto', price: 1500 * UAH },

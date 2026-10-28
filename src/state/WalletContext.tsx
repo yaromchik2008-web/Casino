@@ -15,7 +15,7 @@ import {
 } from './progress';
 import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
-import { INCOME_CAP_HOURS, findItem, hourlyIncome, sellPrice } from './shop';
+import { INCOME_CAP_HOURS, REMOVED_ITEMS, findItem, hourlyIncome, sellPrice } from './shop';
 import { SportBet, SportPick, betResult } from './sports';
 import { tourneyRound } from './friends';
 import { PICKAXES } from '../games/mineEngine';
@@ -208,6 +208,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const saved = JSON.parse(raw);
           // Старі збереження рахували 1 XP за копійку: переводимо на нову, повільнішу шкалу.
           if (!saved.xpV) saved.xp = Math.round((saved.xp ?? 0) / XP_PER_KOPECKS);
+          const owned: string[] = saved.owned ?? [];
+          const refund = owned.reduce((sum, id) => sum + (REMOVED_ITEMS[id] ?? 0), 0);
+          if (refund > 0) {
+            saved.owned = owned.filter((id) => !(id in REMOVED_ITEMS));
+            saved.balance = (saved.balance ?? 0) + refund;
+            notes.push(`📱 Телефони прибрали з магазину: повернули ${formatCoins(refund)}`);
+          }
           const restored = rollPeriods({ ...initialState(), ...saved, xpV: 2 }, notes);
           stateRef.current = restored;
           setState(restored);
