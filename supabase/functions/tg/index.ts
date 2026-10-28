@@ -21,8 +21,6 @@ const cors = {
 
 // Пакети ігрових ₴ за Telegram Stars (той самий список у src/state/stars.ts).
 const PACKS: Record<string, { stars: number; amount: number; title: string }> = {
-  s1: { stars: 1, amount: 10_000, title: '100 ігрових ₴' },
-  s5: { stars: 5, amount: 50_000, title: '500 ігрових ₴' },
   s15: { stars: 15, amount: 150_000, title: '1 500 ігрових ₴' },
   s50: { stars: 50, amount: 550_000, title: '5 500 ігрових ₴' },
   s150: { stars: 150, amount: 1_800_000, title: '18 000 ігрових ₴' },

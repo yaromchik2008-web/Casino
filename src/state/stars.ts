@@ -1,8 +1,6 @@
 // Пакети ігрових ₴ за Telegram Stars (той самий список у supabase/functions/tg/index.ts).
 // Курс 1⭐ = 100 ₴, великі пакети з бонусом.
 export const STAR_PACKS = [
-  { id: 's1', stars: 1, amount: 10_000 },
-  { id: 's5', stars: 5, amount: 50_000 },
   { id: 's15', stars: 15, amount: 150_000 },
   { id: 's50', stars: 50, amount: 550_000 },
   { id: 's150', stars: 150, amount: 1_800_000 },
