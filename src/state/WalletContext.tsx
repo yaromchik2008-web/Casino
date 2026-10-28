@@ -19,6 +19,15 @@ import { INCOME_CAP_HOURS, findItem, hourlyIncome, sellPrice } from './shop';
 import { SportBet, SportPick, betResult } from './sports';
 import { tourneyRound } from './friends';
 import { PICKAXES } from '../games/mineEngine';
+import { findGame } from '../games/catalog';
+
+// Слоти, шахта й каскади віддають ≈ 0.89–0.92, з бонусом ≈ 1.01–1.05; швидкі й настільні ≈ 0.95–0.99, з бонусом ≈ 1.01–1.05.
+const SLOT_KINDS = ['slot', 'tumble', 'holdwin', 'dig'];
+export function winBoost(gameId: string) {
+  const g = findGame(gameId);
+  if (!g) return 1;
+  return SLOT_KINDS.includes(g.kind) ? 1.14 : 1.06;
+}
 
 const KEY = 'freecasino:player:v3';
 
@@ -242,9 +251,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   );
 
   const win = useCallback(
-    (_gameId: string, amount: number) => {
+    (gameId: string, amount: number) => {
       if (amount <= 0) return;
-      const rounded = Math.round(amount);
+      // Бонус удачі (за бажанням ghj): гравець у середньому виходить у невеликий плюс.
+      const rounded = Math.round(amount * winBoost(gameId));
       commit((s) => ({
         ...s,
         balance: s.balance + rounded,
