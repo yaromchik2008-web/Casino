@@ -109,7 +109,7 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
       setWaitTap(false);
       if (!alive.current) return;
       sfx('spin', 0.3);
-      await sleep(1100);
+      await sleep(fast ? 400 : 750);
       const r = respin(b);
       b = r.bonus;
       setFresh(new Set(r.landed.map((l) => l.index)));

@@ -70,7 +70,7 @@ export function DuelSetup({ friend, onDone }: { friend: Profile; onDone: (error?
   return (
     <Panel style={styles.setup}>
       <Text style={styles.title}>⚔️ Дуель з {friend.name}</Text>
-      <Text style={styles.muted}>Обидва ставите однаково. Хто набере більше очок, забирає все. Нічия йде в казну гри.</Text>
+      <Text style={styles.muted}>Обидва ставите однаково. Хто набере більше очок, забирає все. Нічия повертає обом ставку.</Text>
       <View style={styles.wrap}>
         {DUEL_GAMES.map((g) => (
           <Chip key={g.id} label={gameTitle(g.id)} active={game === g.id} onPress={() => setGame(g.id)} />
@@ -193,7 +193,7 @@ export function DuelList({
               ? `🏆 Перемога ${mine} : ${theirs}. Виграш ${formatCoins(d.stake * 2)}`
               : d.winner
                 ? `Поразка ${mine} : ${theirs}. ${other} забирає банк`
-                : `Нічия ${mine} : ${theirs}. Ставки пішли в казну гри`;
+                : `Нічия ${mine} : ${theirs}. Ставки повернуто`;
         } else {
           line = d.status === 'declined' ? `${other} відмовився. Ставку повернуто` : 'Виклик скасовано або час вийшов. Ставку повернуто';
         }

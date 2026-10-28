@@ -42,7 +42,7 @@ export function KarasBonus({ bet, onDone }: { bet: number; onDone: (money: numbe
           await celebrate({ kind: 'win', amount: m * bet, bet });
         }
       },
-      8000,
+      6000,
     );
   };
 

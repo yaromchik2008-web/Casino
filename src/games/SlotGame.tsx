@@ -32,7 +32,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
   const settings = useSettings();
   // Фриспіни крутяться повільніше, щоб було видно кожен оберт.
-  const slow = freeSpins > 0 ? 1.6 : settings.fastSpin ? 0.5 : 1;
+  const slow = freeSpins > 0 ? 1.25 : settings.fastSpin ? 0.5 : 1;
   const base = REEL_BASE_MS * slow;
   const stepMs = REEL_STEP_MS * slow;
   const busy = spinning.some(Boolean);
