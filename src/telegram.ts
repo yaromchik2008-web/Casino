@@ -4,7 +4,7 @@ import { colors } from './theme';
 // Мінімальний опис Telegram Mini App API, який ми використовуємо.
 interface TelegramWebApp {
   initData: string;
-  initDataUnsafe: { user?: { first_name?: string; username?: string }; start_param?: string };
+  initDataUnsafe: { user?: { first_name?: string; last_name?: string; username?: string }; start_param?: string };
   openTelegramLink?: (url: string) => void;
   ready: () => void;
   expand: () => void;
@@ -86,8 +86,12 @@ export function telegramInitData(): string {
   return current()?.initData ?? '';
 }
 
+// Ім'я як у Telegram: ім'я та прізвище, а якщо їх нема, то юзернейм.
 export function telegramName(): string | undefined {
-  return current()?.initDataUnsafe.user?.first_name;
+  const u = current()?.initDataUnsafe.user;
+  if (!u) return undefined;
+  const full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+  return (full || u.username || '').slice(0, 24) || undefined;
 }
 
 export function telegramHaptic(kind: 'tap' | 'win' | 'lose'): boolean {

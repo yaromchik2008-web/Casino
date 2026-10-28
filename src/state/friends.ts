@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { BOT_USERNAME, SUPABASE_ANON_KEY, SUPABASE_URL, WEB_URL, friendsEnabled } from '../config';
-import { cloudGet, cloudSet, telegramInitData, waitTelegram } from '../telegram';
+import { cloudGet, cloudSet, telegramInitData, telegramName, waitTelegram } from '../telegram';
 
 const CLOUD_KEY = 'sb_refresh';
 
@@ -152,13 +152,19 @@ export function startFriends(defaultName: string): Promise<Profile> {
     if (existing.error) throw existing.error;
     if (existing.data) {
       me = existing.data as Profile;
+      // Старі профілі з іменем за замовчуванням отримують ім'я з Telegram.
+      const tgName = telegramName();
+      if (tgName && me.name === 'Гравець') {
+        const upd = await sb.from('profiles').update({ name: tgName }).eq('id', uid);
+        if (!upd.error) me = { ...me, name: tgName };
+      }
       if (inTelegram) linkTelegram(telegramInitData()).catch(() => {});
       return me;
     }
     for (let attempt = 0; attempt < 5; attempt++) {
       const ins = await sb
         .from('profiles')
-        .insert({ id: uid, code: newCode(), name: defaultName.slice(0, 24) || 'Гравець' })
+        .insert({ id: uid, code: newCode(), name: (telegramName() ?? defaultName).slice(0, 24) || 'Гравець' })
         .select()
         .single();
       if (!ins.error) {
