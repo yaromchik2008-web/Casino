@@ -154,6 +154,8 @@ interface WalletApi {
   claimAchievement: (id: string) => number;
   placeSportBet: (picks: SportPick[], stake: number) => boolean;
   redeemPromo: (code: string) => number | 'used' | 'invalid' | 'reset';
+  /** Виставляє баланс, який задав адмін на сервері. */
+  setBalance: (amount: number) => void;
   enterTourney: (round: number) => void;
   grantItem: (id: string) => 'item' | 'cash' | 'none';
   openGame: (gameId: string) => void;
@@ -490,6 +492,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [loaded, commit, notify]);
 
+  const setBalance = useCallback((amount: number) => commit((p) => ({ ...p, balance: Math.max(0, Math.round(amount)) })), [commit]);
+
   const redeemPromo = useCallback(
     (raw: string) => {
       const code = raw.trim().toLowerCase();
@@ -563,6 +567,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         claimAchievement,
         placeSportBet,
         redeemPromo,
+        setBalance,
         enterTourney,
         grantItem,
         openGame,

@@ -357,6 +357,14 @@ export async function linkTelegram(initData: string) {
 }
 
 /** Бонус за запрошення: обидва отримують по 200 ₴. Повертає ім'я того, хто запросив. */
+/** Баланс, який виставив адмін (docs/supabase-v7.sql), або null. */
+export async function takeBalanceOverride(): Promise<number | null> {
+  if (!me) return null;
+  const { data, error } = await db().rpc('take_balance_override');
+  if (error) return null;
+  return data == null ? null : Number(data);
+}
+
 export async function claimReferral(code: string): Promise<string> {
   const { data, error } = await db().rpc('claim_referral', { p_code: code.trim().toUpperCase() });
   if (error) throw error;

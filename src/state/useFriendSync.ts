@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { telegramName, telegramStartParam } from '../telegram';
 import { formatCoins } from '../theme';
 import { sfx } from '../audio/sound';
-import { claimReferral, claimTransfers, inboxSince, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
+import { claimReferral, claimTransfers, inboxSince, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
 import { assetsValue, statusFor } from './shop';
 import { useWallet } from './WalletContext';
 
@@ -51,7 +51,12 @@ export function useFriendSync() {
     const tick = async () => {
       try {
         await startFriends(telegramName() ?? 'Гравець');
-        const s = ref.current.state;
+        const forced = await takeBalanceOverride();
+        if (forced != null && !stopped) {
+          ref.current.setBalance(forced);
+          ref.current.notify(`🛠️ Адмін встановив баланс: ${formatCoins(forced)}`);
+        }
+        const s = forced != null ? { ...ref.current.state, balance: forced } : ref.current.state;
         const status = statusFor(s.balance + assetsValue(s.owned));
         await syncProfile({ balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}`, owned: s.owned });
         await tryReferral(ref.current.notify).catch(() => {});
