@@ -116,7 +116,7 @@ export const GAMES: GameInfo[] = [
     kind: 'slot',
     categories: ['new', 'popular', 'slots'],
     tag: 'NEW',
-    slot: video(['🟩', '⬜', '🚐', '🚙', '🟢', '🚘'], '🚓', '🛻'),
+    slot: video(['🟩', '⬜', '🚐', '🚗', '🟢', '🚘'], '🚓', '🛻'),
     art: CARS_ART,
     description: '5 барабанів з машинами: від «сімки» і Ланоса до Ікс 3. Поліція-wild замінює всіх, 3+ УАЗи дають фриспіни.',
   },
