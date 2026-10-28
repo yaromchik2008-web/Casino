@@ -15,7 +15,8 @@ const SEGMENTS: RingSegment[] = WHEEL_SEGMENTS.map((m, i) =>
 );
 
 /** Колесо фортуни «Золотого Карася». onDone отримує виграш грошима і чи випав Спринтер. */
-export function KarasBonus({ bet, onDone }: { bet: number; onDone: (money: number, sprinter: boolean) => void }) {
+/** bank: виграш фриспінів (не менше ставки), колесо множить його. Спринтер дається разом із банком. */
+export function KarasBonus({ bet, bank, onDone }: { bet: number; bank: number; onDone: (money: number, sprinter: boolean) => void }) {
   const { width } = useWindowDimensions();
   const size = Math.min(340, width - 40);
   const wheel = useRef<RingWheelHandle>(null);
@@ -39,7 +40,7 @@ export function KarasBonus({ bet, onDone }: { bet: number; onDone: (money: numbe
           await celebrate({ kind: 'total', title: 'МЕГАПРИЗ!', amount: SPRINTER_VALUE, emoji: '🚐' });
         } else {
           sfx(m >= 25 ? 'bigwin' : 'win');
-          await celebrate({ kind: 'win', amount: m * bet, bet });
+          await celebrate({ kind: 'win', amount: m * bank, bet });
         }
       },
       6000,
@@ -51,7 +52,8 @@ export function KarasBonus({ bet, onDone }: { bet: number; onDone: (money: numbe
       <View style={styles.back}>
         <View style={styles.card}>
           <Text style={styles.title}>🐟 КОЛЕСО ФОРТУНИ</Text>
-          <Text style={styles.sub}>Мегаприз: Mercedes Sprinter 3.0 вартістю {formatCoins(SPRINTER_VALUE)}</Text>
+          <Text style={styles.bank}>Банк фриспінів: {formatCoins(bank)}</Text>
+          <Text style={styles.sub}>Колесо помножить банк. Мегаприз: Mercedes Sprinter 3.0 вартістю {formatCoins(SPRINTER_VALUE)}</Text>
           <RingWheel ref={wheel} segments={SEGMENTS} size={size} thickness={size * 0.2} labelSize={size * 0.045}>
             {prize == null ? (
               <Text style={styles.center}>{state === 'spin' ? '…' : 'КРУТИ!'}</Text>
@@ -63,14 +65,14 @@ export function KarasBonus({ bet, onDone }: { bet: number; onDone: (money: numbe
             ) : (
               <>
                 <Text style={styles.center}>×{prize}</Text>
-                <Text style={styles.centerSmall}>{formatCoins(prize * bet)}</Text>
+                <Text style={styles.centerSmall}>{formatCoins(prize * bank)}</Text>
               </>
             )}
           </RingWheel>
           {state === 'done' ? (
             <BigButton
-              label={prize === 0 ? 'ЗАБРАТИ SPRINTER' : `ЗАБРАТИ ${formatCoins((prize ?? 0) * bet)}`}
-              onPress={() => onDone(prize === 0 ? 0 : (prize ?? 0) * bet, prize === 0)}
+              label={prize === 0 ? `ЗАБРАТИ SPRINTER + ${formatCoins(bank)}` : `ЗАБРАТИ ${formatCoins((prize ?? 0) * bank)}`}
+              onPress={() => onDone(prize === 0 ? bank : (prize ?? 0) * bank, prize === 0)}
             />
           ) : (
             <BigButton label={state === 'spin' ? 'КРУТИТЬСЯ…' : 'КРУТИТИ КОЛЕСО'} disabled={state !== 'ready'} onPress={spin} />
@@ -87,6 +89,7 @@ const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, backgroundColor: '#14102A', borderRadius: 24, borderWidth: 3, borderColor: '#FFC83D', padding: 16, gap: 12, alignItems: 'center' },
   title: { color: '#FFC83D', fontWeight: '900', fontSize: 22, letterSpacing: 1 },
   sub: { color: colors.text, fontSize: 13, textAlign: 'center' },
+  bank: { color: colors.gold, fontSize: 18, fontWeight: '900' },
   center: { color: '#FFFFFF', fontWeight: '900', fontSize: 30 },
   centerSmall: { color: '#FFC83D', fontWeight: '800', fontSize: 14, textAlign: 'center' },
   big: { fontSize: 56 },

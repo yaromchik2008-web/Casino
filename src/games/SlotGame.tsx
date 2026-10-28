@@ -13,6 +13,7 @@ import { SPRINTER_ID } from './karasWheel';
 import { Grid, ROWS, SlotConfig, evaluateGrid, paylines, randomSymbol, spinGrid } from './slotEngine';
 
 const REEL_BASE_MS = 700;
+const KARAS_FREE_SPINS = 5;
 const REEL_STEP_MS = 260;
 
 export function SlotGame({ game }: { game: GameInfo }) {
@@ -25,9 +26,11 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const [highlight, setHighlight] = useState<boolean[][]>([]);
   const [message, setMessage] = useState({ text: 'Удачі!', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const [freeSpins, setFreeSpins] = useState(0);
-  // У «Золотому Карасі» скатери запускають колесо фортуни замість фриспінів.
+  // У «Золотому Карасі» скатери дають 5 фриспінів, їхній виграш іде в банк, а колесо фортуни множить банк.
   const wheelBonus = game.id === 'golden-karas';
   const [bonusBet, setBonusBet] = useState<number | null>(null);
+  const [bank, setBank] = useState(0);
+  const bankRef = useRef(0);
   const [auto, setAuto] = useState(0);
   const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
   const settings = useSettings();
@@ -51,6 +54,8 @@ export function SlotGame({ game }: { game: GameInfo }) {
       return;
     }
     if (free) setFreeSpins((n) => n - 1);
+    const karasFree = free && wheelBonus;
+    const lastFree = karasFree && freeSpins <= 1;
     const result = spinGrid(config);
     const outcome = evaluateGrid(config, result, bet);
     setGrid(result);
@@ -93,7 +98,12 @@ export function SlotGame({ game }: { game: GameInfo }) {
           parts.push(`💰 ДЖЕКПОТ ${formatCoins(amount)}!`);
           celebrate({ kind: 'total', title: 'ДЖЕКПОТ!', amount, emoji: '💰' });
         }
-        if (outcome.win > 0) {
+        if (outcome.win > 0 && karasFree) {
+          bankRef.current += outcome.win;
+          setBank(bankRef.current);
+          parts.push(`+${formatCoins(outcome.win)} у банк`);
+          sfx('win');
+        } else if (outcome.win > 0) {
           wallet.win(game.id, outcome.win);
           parts.push(`+${formatCoins(outcome.win)}`);
           setLastWin((w) => ({ amount: outcome.win, key: w.key + 1 }));
@@ -102,14 +112,18 @@ export function SlotGame({ game }: { game: GameInfo }) {
             celebrate({ kind: 'win', amount: outcome.win, bet });
           } else sfx('win');
         }
-        if (outcome.freeSpins > 0 && wheelBonus) {
+        if (lastFree) {
+          parts.push('Банк іде в колесо фортуни!');
+          setTimeout(() => setBonusBet(bet), 900);
+        } else if (outcome.freeSpins > 0 && wheelBonus && !karasFree) {
           setAuto(0);
           wallet.track('bonuses');
-          parts.push('Колесо фортуни!');
-          celebrate({ kind: 'intro', emoji: '🎡', title: 'КОЛЕСО ФОРТУНИ!', subtitle: 'Крути і вигравай до ×100 або Mercedes Sprinter' }).then(() =>
-            setBonusBet(bet),
-          );
-        } else if (outcome.freeSpins > 0) {
+          bankRef.current = 0;
+          setBank(0);
+          setFreeSpins(KARAS_FREE_SPINS);
+          parts.push(`${KARAS_FREE_SPINS} фриспінів!`);
+          celebrate({ kind: 'intro', emoji: '🐟', title: `${KARAS_FREE_SPINS} ФРИСПІНІВ!`, subtitle: 'Увесь виграш піде в колесо фортуни і помножиться' });
+        } else if (outcome.freeSpins > 0 && !wheelBonus) {
           setFreeSpins((n) => n + outcome.freeSpins);
           setAuto(0);
           wallet.track('bonuses');
@@ -141,7 +155,10 @@ export function SlotGame({ game }: { game: GameInfo }) {
 
   const finishBonus = (money: number, sprinter: boolean) => {
     setBonusBet(null);
+    bankRef.current = 0;
+    setBank(0);
     if (sprinter) {
+      if (money > 0) wallet.win(game.id, money);
       const r = wallet.grantItem(SPRINTER_ID);
       wallet.notify(r === 'cash' ? 'Другий Sprinter: зараховано його вартість грошима!' : '🚐 Mercedes Sprinter 3.0 тепер твій!');
       setMessage({ text: '🚐 MERCEDES SPRINTER 3.0!', tone: 'win' });
@@ -154,7 +171,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
 
   return (
     <View style={styles.root}>
-      {bonusBet != null && <KarasBonus bet={bonusBet} onDone={finishBonus} />}
+      {bonusBet != null && <KarasBonus bet={bonusBet} bank={Math.max(bank, bonusBet)} onDone={finishBonus} />}
       {config.jackpotSymbol && (
         <View style={styles.jackpot}>
           <Text style={styles.jackpotLabel}>ПРОГРЕСИВНИЙ ДЖЕКПОТ</Text>
@@ -183,7 +200,12 @@ export function SlotGame({ game }: { game: GameInfo }) {
             />
           ))}
         </View>
-        {freeSpins > 0 && <Text style={styles.free}>Фриспіни: {freeSpins}</Text>}
+        {freeSpins > 0 && (
+          <Text style={styles.free}>
+            Фриспіни: {freeSpins}
+            {wheelBonus ? ` · Банк: ${formatCoins(bank)}` : ''}
+          </Text>
+        )}
       </View>
       <WinCounter amount={lastWin.amount} countKey={lastWin.key} />
       <ResultLine text={message.text} tone={message.tone} />
@@ -213,7 +235,7 @@ function Paytable({ config, art, wheel }: { config: SlotConfig; art?: GameInfo['
           <Text style={styles.payText}>
             {s.id === config.scatter
               ? wheel
-                ? '3/4/5 будь-де: ×5/×20/×100 ставки + Колесо фортуни (до ×100 або Mercedes Sprinter 3.0)'
+                ? '3/4/5 будь-де: ×5/×20/×100 ставки + 5 фриспінів, виграш яких Колесо фортуни множить до ×100 (або Mercedes Sprinter 3.0)'
                 : '3/4/5 будь-де: ×5/×20/×100 ставки + фриспіни'
               : s.id === config.wild
                 ? `Wild: замінює символи · ${s.pays.map((p) => `×${p}`).join(' / ')}`

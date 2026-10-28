@@ -57,8 +57,8 @@ function classic(emojis: string[], jackpot = false): SlotConfig {
   return { reels: 3, symbols, jackpotSymbol: jackpot ? symbols[symbols.length - 1].id : undefined };
 }
 
-function video(emojis: string[], wild: string, scatter: string): SlotConfig {
-  return { reels: 5, symbols: videoSymbols(emojis, wild, scatter), wild: 'wild', scatter: 'scatter' };
+function video(emojis: string[], wild: string, scatter: string, payScale?: number): SlotConfig {
+  return { reels: 5, symbols: videoSymbols(emojis, wild, scatter, payScale), wild: 'wild', scatter: 'scatter' };
 }
 
 // Основна гра «Утримай і виграй»: без скатерів, бонус запускають монети (RTP ≈ 0.90, див. holdwinEngine).
@@ -103,9 +103,9 @@ export const GAMES: GameInfo[] = [
     kind: 'slot',
     categories: ['new', 'popular', 'slots'],
     tag: 'NEW',
-    slot: video(['😄', '🎣', '🥵', '🧥', '🏖️', '😎'], '🐟', '🎰'),
+    slot: video(['😄', '🎣', '🥵', '🧥', '🏖️', '😎'], '🐟', '🎰', 0.66),
     art: KARAS_ART,
-    description: 'Наш фірмовий слот. Карась-wild замінює всіх, 3+ «БОНУС» запускають Колесо фортуни з мегапризом Mercedes Sprinter 3.0. Тінь платить до ×426.',
+    description: 'Наш фірмовий слот. Карась-wild замінює всіх, 3+ «БОНУС» дають 5 фриспінів, а Колесо фортуни множить їхній виграш до ×100. Мегаприз: Mercedes Sprinter 3.0.',
   },
   {
     id: 'fruit-classic',
