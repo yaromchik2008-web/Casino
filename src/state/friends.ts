@@ -378,5 +378,6 @@ export async function myReferrals(): Promise<number> {
 }
 
 export function inviteLink(code: string) {
-  return BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?startapp=ref_${code}` : `${WEB_URL}?ref=${code}`;
+  // Посилання відкриває чат бота: друг тисне «Старт», і бот дає кнопку входу в гру з кодом запрошення.
+  return BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=ref_${code}` : `${WEB_URL}?ref=${code}`;
 }

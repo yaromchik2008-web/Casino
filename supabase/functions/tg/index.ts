@@ -4,6 +4,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const BOT = Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '';
+// Секретне слово вебхука (Edge Functions → Secrets → TG_WEBHOOK_SECRET), те саме, що в setWebhook.
+const HOOK_SECRET = Deno.env.get('TG_WEBHOOK_SECRET') ?? '';
 const APP_URL = 'https://yaromchik2008-web.github.io/Casino/';
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const GAMES: Record<string, string> = {
@@ -54,6 +56,21 @@ async function send(userId: string, text: string) {
   if (!res.ok) console.log('telegram error', await res.text());
 }
 
+// Бот отримав /start: вітаємо й даємо кнопку входу в гру. Запрошення ref_КОД передаємо в гру.
+async function onStart(chatId: number, payload: string) {
+  const ref = payload.match(/^ref_([A-Z0-9]{6})$/i)?.[1]?.toUpperCase();
+  const url = ref ? `${APP_URL}?ref=${ref}` : APP_URL;
+  const text = ref
+    ? '🎉 Тебе запросив друг! Натисни кнопку нижче, заходь у гру, і ви обоє отримаєте по 200 ігрових ₴.'
+    : '🎰 Вітаю в Casino Victor! Натисни кнопку нижче, щоб почати грати.';
+  const res = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, reply_markup: { inline_keyboard: [[{ text: '🎰 Грати в Casino Victor', web_app: { url } }]] } }),
+  });
+  if (!res.ok) console.log('telegram error', await res.text());
+}
+
 async function nameOf(id: string) {
   const { data } = await admin.from('profiles').select('name').eq('id', id).maybeSingle();
   return data?.name ?? 'Друг';
@@ -84,6 +101,17 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
     const body = await req.json();
+    // Оновлення від Telegram (вебхук бота).
+    if (body.update_id != null) {
+      if (!HOOK_SECRET || req.headers.get('X-Telegram-Bot-Api-Secret-Token') !== HOOK_SECRET) {
+        console.log('webhook secret mismatch');
+        return new Response('forbidden', { status: 403 });
+      }
+      const msg = body.message;
+      const text = String(msg?.text ?? '');
+      if (msg?.chat?.type === 'private' && text.startsWith('/start')) await onStart(msg.chat.id, text.split(' ')[1] ?? '');
+      return new Response('ok');
+    }
     if (body.action === 'link') {
       const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
       const { data } = await admin.auth.getUser(jwt);

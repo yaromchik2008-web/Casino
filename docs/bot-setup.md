@@ -23,3 +23,12 @@ Supabase → **Edge Functions** → **Secrets** → **Add new secret**:
 ## 4. Гравцям
 Кожен гравець має хоч раз натиснути **Start** у боті й відкрити гру через бота.
 Тоді приходитимуть повідомлення: виклик на дуель, подарунок і нове повідомлення в чаті (якщо гравець зараз не в грі).
+
+## 5. Запрошення через бота (кнопка «Старт»)
+Посилання-запрошення тепер ведуть у чат бота: друг тисне **Старт**, і бот дає кнопку входу в гру з бонусом 200 ₴.
+1. Онови код функції `tg`: Edge Functions → `tg` → Code → встав новий текст з `supabase/functions/tg/index.ts` → **Deploy**.
+2. Edge Functions → **Secrets** → **Add new secret**: Name `TG_WEBHOOK_SECRET`, Value: будь-яке своє слово з латинських літер і цифр (наприклад `victor2026hook`).
+3. Відкрий у браузері посилання, підставивши свій токен і своє слово (робиш сам, нікому не надсилай):
+   `https://api.telegram.org/bot<ТОКЕН>/setWebhook?url=https://kkujedghuxgtxmsbquqc.supabase.co/functions/v1/tg&secret_token=<СЛОВО>`
+   Має з'явитися `"ok":true` і `Webhook was set`.
+4. Перевір: напиши боту `/start`, він має відповісти кнопкою «🎰 Грати в Casino Victor».
