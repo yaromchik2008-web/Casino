@@ -244,6 +244,23 @@ export async function loadMessages(friendId: string): Promise<Message[]> {
   return ((data ?? []) as Message[]).reverse();
 }
 
+/** Нові повідомлення мені після моменту since (час сервера) з іменами відправників. */
+export async function inboxSince(since: string | null): Promise<{ latest: string | null; items: { name: string; body: string }[] }> {
+  if (!me) return { latest: since, items: [] };
+  let q = db().from('messages').select('sender, body, created_at').eq('receiver', me.id).order('created_at', { ascending: false }).limit(5);
+  if (since) q = q.gt('created_at', since);
+  const { data, error } = await q;
+  if (error) throw error;
+  const rows = (data ?? []) as { sender: string; body: string; created_at: string }[];
+  if (!rows.length) return { latest: since, items: [] };
+  // Перший запуск лише запам'ятовує, де ми зупинились, без старих сповіщень.
+  if (!since) return { latest: rows[0].created_at, items: [] };
+  const ids = [...new Set(rows.map((r) => r.sender))];
+  const names = await db().from('profiles').select('id, name').in('id', ids);
+  const byId = new Map(((names.data ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
+  return { latest: rows[0].created_at, items: rows.reverse().map((r) => ({ name: byId.get(r.sender) ?? 'Друг', body: r.body })) };
+}
+
 export async function sendMessage(friendId: string, body: string) {
   const { error } = await db().from('messages').insert({ receiver: friendId, body: body.slice(0, 500) });
   if (error) throw error;

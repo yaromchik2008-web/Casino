@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { getSettings, sfx } from '../audio/sound';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { sfx } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
 import { BetSelector, BigButton, Panel, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
@@ -8,14 +8,17 @@ import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 import {
   BLOCKS,
+  BOTTOM_BONUS,
   Block,
+  FPS,
   MINE_COLS,
-  PICKAXES,
-  STRIKES,
-  autoTarget,
+  MINE_ROWS,
+  ORE_SCALE,
+  PICK_TIERS,
   blockValue,
   generateMine,
-  reachable,
+  rollPick,
+  simulateRun,
   strike,
 } from './mineEngine';
 
@@ -53,7 +56,7 @@ function texture(block: Block, index: number) {
   return TEX[block.type];
 }
 
-function BlockView({
+const BlockView = memo(function BlockView({
   block,
   index,
   size,
@@ -88,10 +91,10 @@ function BlockView({
   return (
     <Pressable onPress={onPress} disabled={!canHit}>
       <Animated.View
-        style={{ width: size, height: size, transform: [{ translateX: shake.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) }] }}
+        style={{ width: size, height: size, overflow: 'hidden', transform: [{ translateX: shake.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) }] }}
       >
         <Image source={texture(block, index)} style={{ width: size, height: size }} />
-        {damage > 0 && <Image source={CRACKS[Math.min(2, Math.floor(damage * 3))]} style={StyleSheet.absoluteFill} />}
+        {damage > 0 && <Image source={CRACKS[Math.min(2, Math.floor(damage * 3))]} style={{ position: 'absolute', left: 0, top: 0, width: size, height: size }} />}
         <View
           pointerEvents="none"
           style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Math.min(0.3, depth * 0.018) + (canHit ? 0 : 0.22)})` }]}
@@ -99,59 +102,55 @@ function BlockView({
       </Animated.View>
     </Pressable>
   );
-}
+});
 
-// Кирка, що сама стрибає на блок і б'є. Над блоком видно його міцність.
-function FlyingPick({
-  x,
-  y,
-  size,
-  hitKey,
-  tier,
-  hp,
-}: {
-  x: number;
-  y: number;
-  size: number;
-  hitKey: number;
-  tier: number;
-  hp: number | null;
-}) {
-  const jump = useRef(new Animated.Value(1)).current;
+const NOOP = () => {};
+
+// Рулетка, яка вибирає кирку на заїзд: від дерев'яної (мало HP) до алмазної (найбільше HP).
+const ROLL_ITEM = 76;
+const ROLL_LEN = 36;
+const ROLL_STOP = 30;
+
+function PickRoulette({ tier, onDone }: { tier: number; onDone: () => void }) {
+  const { width } = useWindowDimensions();
+  const view = Math.min(width, 480) - 64;
+  const x = useRef(new Animated.Value(0)).current;
+  const [done, setDone] = useState(false);
+  const strip = useMemo(() => Array.from({ length: ROLL_LEN }, (_, i) => (i === ROLL_STOP ? tier : rollPick())), [tier]);
   useEffect(() => {
-    if (getSettings().lite) return;
-    jump.setValue(0);
-    Animated.timing(jump, { toValue: 1, duration: 260, useNativeDriver: true }).start();
-  }, [hitKey, jump]);
+    sfx('spin', 0.5);
+    const target = -(ROLL_STOP * ROLL_ITEM - view / 2 + ROLL_ITEM / 2) + (Math.random() - 0.5) * ROLL_ITEM * 0.6;
+    Animated.timing(x, { toValue: target, duration: 3000, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => {
+      setDone(true);
+      sfx(tier >= 2 ? 'bigwin' : 'win', 0.7);
+      haptic('win');
+      setTimeout(onDone, 1100);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const t = PICK_TIERS[tier];
   return (
-    <>
-      {hp != null && (
-        <View pointerEvents="none" style={[styles.hp, { left: x - size * 0.3, top: y - 22, width: size * 1.6 }]}>
-          <Text style={styles.hpText}>❤ {hp}/100</Text>
-        </View>
-      )}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.pick,
-          {
-            width: size,
-            height: size,
-            transform: [
-              { translateX: x + size * 0.1 },
-              { translateY: jump.interpolate({ inputRange: [0, 0.5, 1], outputRange: [y - size * 0.7, y - size * 0.05, y] }) },
-              { rotate: jump.interpolate({ inputRange: [0, 0.6, 1], outputRange: ['-45deg', '25deg', '0deg'] }) },
-            ],
-          },
-        ]}
-      >
-        <Image source={PICKS[tier] ?? PICKS[0]} style={{ width: size * 0.8, height: size * 0.8 }} />
-      </Animated.View>
-    </>
+    <Panel style={styles.roll}>
+      <Text style={styles.upTitle}>🎰 Яка кирка тобі випаде?</Text>
+      <View style={[styles.rollWindow, { width: view }]}>
+        <Animated.View style={[styles.rollStrip, { transform: [{ translateX: x }] }]}>
+          {strip.map((k, i) => (
+            <View key={i} style={[styles.rollItem, { borderColor: PICK_TIERS[k].color }]}>
+              <Image source={PICKS[k]} style={{ width: 44, height: 44 }} />
+              <Text style={[styles.rollHp, { color: PICK_TIERS[k].color }]}>❤ {PICK_TIERS[k].hp}</Text>
+            </View>
+          ))}
+        </Animated.View>
+        <View pointerEvents="none" style={[styles.rollPointer, { left: view / 2 - 2 }]} />
+      </View>
+      <Text style={[styles.infoText, { color: done ? t.color : colors.muted }]}>
+        {done ? `Випала: ${t.name} · ❤ ${t.hp} HP · сила ${t.power}` : 'Крутимо…'}
+      </Text>
+    </Panel>
   );
 }
 
-// У дуелі всі грають дерев'яною киркою і віртуальною ставкою, очки = знайдене × 1000.
+// У дуелі ставка віртуальна, очки = знайдене × 1000.
 export const DUEL_MINE_BET = 1000;
 
 export function MineGame({
@@ -166,96 +165,121 @@ export function MineGame({
   autoStart?: boolean;
 }) {
   const wallet = useWallet();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [bet, setBet] = useState(100);
+  const [phase, setPhase] = useState<'idle' | 'roll' | 'run'>('idle');
   const [blocks, setBlocks] = useState<Block[] | null>(null);
-  const [strikes, setStrikes] = useState(STRIKES);
+  const [tier, setTier] = useState(0);
+  const [pickHp, setPickHp] = useState(0);
   const [runValue, setRunValue] = useState(0);
   const [runBet, setRunBet] = useState(0);
   const [shakes, setShakes] = useState<Record<number, number>>({});
-  const [auto, setAuto] = useState(true);
-  const [target, setTarget] = useState(-1);
-  const [hitKey, setHitKey] = useState(0);
-  const [message, setMessage] = useState({ text: 'Копай глибше: там цінніша руда', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
-  const pick = duel ? PICKAXES[0] : PICKAXES[wallet.state.pickaxe];
-  const nextPick = PICKAXES[wallet.state.pickaxe + 1];
-  const size = Math.floor((Math.min(width, 480) - 32) / MINE_COLS);
+  const [message, setMessage] = useState({ text: 'Кирка падає сама й ламає блоки, поки в неї є HP', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
+  const pos = useRef(new Animated.ValueXY({ x: 0, y: -100 })).current;
+  const rot = useRef(new Animated.Value(0)).current;
+  const play = useRef<{ raf: number; skip: boolean; alive: boolean }>({ raf: 0, skip: false, alive: true });
+  // Уся шахта має влазити в екран, щоб кирку було видно до самого дна.
+  const size = Math.max(26, Math.min(Math.floor((Math.min(width, 480) - 32) / MINE_COLS), Math.floor((height - 420) / MINE_ROWS)));
+  const pick = PICK_TIERS[tier];
+
+  useEffect(
+    () => () => {
+      play.current.alive = false;
+      cancelAnimationFrame(play.current.raf);
+    },
+    [],
+  );
 
   const show = (v: number) => (duel ? `${Math.round(v)} очок` : formatCoins(v));
 
   const start = () => {
-    if (duel) {
-      setBlocks(generateMine());
-      setStrikes(STRIKES);
-      setRunValue(0);
-      setRunBet(DUEL_MINE_BET);
-      setTarget(-1);
-      setAuto(true);
-      setMessage({ text: `Дуель: ${STRIKES} ударів, хто знайде більше`, tone: 'neutral' });
-      return;
-    }
-    if (!wallet.bet(game.id, 'fast', bet)) {
+    if (!duel && !wallet.bet(game.id, 'fast', bet)) {
       setMessage({ text: 'Недостатньо коштів', tone: 'lose' });
       return;
     }
+    const t = rollPick();
+    setRunBet(duel ? DUEL_MINE_BET : bet);
     setBlocks(generateMine());
-    setStrikes(STRIKES);
+    setTier(t);
+    setPickHp(PICK_TIERS[t].hp);
     setRunValue(0);
-    setRunBet(bet);
-    setTarget(-1);
-    setAuto(true);
-    setMessage({ text: `${STRIKES} ударів. Кирка копає сама, тапни блок, щоб змінити ціль`, tone: 'neutral' });
+    setShakes({});
+    setPhase('roll');
+    setMessage({ text: duel ? 'Дуель: один заїзд, хто знайде більше' : 'Крутимо рулетку кирок…', tone: 'neutral' });
   };
 
-  const finish = async (value: number) => {
-    const won = Math.round(value * runBet);
+  const finish = async (value: number, stake: number, bottom: boolean) => {
+    const won = Math.round(value * stake);
     if (duel) {
+      setPhase('idle');
       setBlocks(null);
       duel(won);
       return;
     }
     if (won > 0) {
       wallet.win(game.id, won);
-      if (winTier(won, runBet)) await celebrate({ kind: 'win', amount: won, bet: runBet });
+      if (winTier(won, stake)) await celebrate({ kind: 'win', amount: won, bet: stake });
       else sfx('cash');
-      setMessage({ text: `Заїзд завершено: +${formatCoins(won)}`, tone: 'win' });
-    } else setMessage({ text: 'Порожня шахта. Спробуй ще!', tone: 'lose' });
+      setMessage({ text: `${bottom ? 'Пробився до дна! ' : ''}Заїзд завершено: +${formatCoins(won)}`, tone: 'win' });
+    } else setMessage({ text: 'Кирка зламалась. Спробуй ще!', tone: 'lose' });
+    if (!play.current.alive) return;
+    setPhase('idle');
     setBlocks(null);
   };
 
-  const hit = (i: number) => {
-    if (!blocks || strikes <= 0 || !reachable(blocks, i)) return;
-    setTarget(i);
-    setHitKey((k) => k + 1);
-    const r = strike(blocks, i, pick.power);
-    setShakes((s) => ({ ...s, [i]: (s[i] ?? 0) + 1 }));
-    setBlocks(r.blocks);
-    const left = strikes - 1;
-    setStrikes(left);
-    let value = runValue;
-    if (r.broken.length) {
-      value += r.value;
-      setRunValue(value);
-      onProgress?.(Math.round(value * runBet));
-      if (r.exploded) {
-        sfx('bomb');
-        haptic('win');
-      } else sfx('break', 0.7);
-      const found = r.broken.map((b) => r.blocks[b]).filter((b) => blockValue(b) > 0);
-      if (found.some((b) => b.type === 'diamond')) wallet.track('diamonds', found.filter((b) => b.type === 'diamond').length);
-      if (found.length) {
-        const best = found.sort((a, b) => blockValue(b) - blockValue(a))[0];
-        setMessage({
-          text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${r.exploded ? ' (вибух!)' : ''} +${show(r.value * runBet)}`,
-          tone: 'win',
-        });
-        sfx('coin', 0.6);
-      } else if (r.exploded) setMessage({ text: '🧨 Бабах!', tone: 'neutral' });
-    } else {
-      sfx('hit', 0.6);
-      haptic('tap');
-    }
-    if (left <= 0) setTimeout(() => finish(value), 500);
+  // Програє наперед прорахований заїзд: позиція кирки йде напряму в анімацію, блоки оновлюються лише на ударах.
+  const run = () => {
+    if (!blocks) return;
+    const r = simulateRun(blocks, tier);
+    const stake = runBet;
+    setPhase('run');
+    setMessage({ text: `${pick.name}: ❤ ${pick.hp} HP. Поїхали!`, tone: 'neutral' });
+    let cur = blocks;
+    let value = 0;
+    let next = 0;
+    const total = r.frames.length / 3;
+    const t0 = Date.now();
+    play.current.skip = false;
+    const step = () => {
+      if (!play.current.alive) return;
+      const f = play.current.skip ? total - 1 : Math.min(total - 1, Math.floor(((Date.now() - t0) / 1000) * FPS));
+      pos.setValue({ x: r.frames[f * 3] * size - size / 2, y: r.frames[f * 3 + 1] * size - size / 2 });
+      rot.setValue(r.frames[f * 3 + 2]);
+      let changed = false;
+      while (next < r.hits.length && r.hits[next].frame <= f) {
+        const h = r.hits[next++];
+        cur = strike(cur, h.index, pick.power).blocks;
+        value += h.value;
+        changed = true;
+        setPickHp(h.pickHp);
+        setShakes((s) => ({ ...s, [h.index]: (s[h.index] ?? 0) + 1 }));
+        if (play.current.skip) continue;
+        if (h.exploded) {
+          sfx('bomb');
+          haptic('win');
+        } else if (h.broken.length) sfx('break', 0.6);
+        else sfx('hit', 0.5);
+        const found = h.broken.map((b) => cur[b]).filter((b) => blockValue(b) > 0);
+        if (found.some((b) => b.type === 'diamond')) wallet.track('diamonds', found.filter((b) => b.type === 'diamond').length);
+        if (found.length) {
+          const best = found.sort((a, b) => blockValue(b) - blockValue(a))[0];
+          setMessage({ text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${h.exploded ? ' (вибух!)' : ''} +${show(h.value * stake)}`, tone: 'win' });
+          sfx('coin', 0.6);
+        }
+      }
+      if (changed) {
+        setBlocks(cur);
+        setRunValue(value);
+        onProgress?.(Math.round(value * stake));
+      }
+      if (f >= total - 1) {
+        if (r.bottom) onProgress?.(Math.round(r.value * stake));
+        setTimeout(() => finish(r.value, stake, r.bottom), 600);
+        return;
+      }
+      play.current.raf = requestAnimationFrame(step);
+    };
+    play.current.raf = requestAnimationFrame(step);
   };
 
   useEffect(() => {
@@ -263,42 +287,34 @@ export function MineGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Автокопання: кирка сама обирає блок і б'є, поки є удари. Тап по блоку змінює ціль.
-  useEffect(() => {
-    if (!blocks || strikes <= 0 || !auto) return;
-    const t = setTimeout(() => {
-      const keep = target >= 0 && !blocks[target].broken && reachable(blocks, target);
-      const next = keep ? target : autoTarget(blocks, pick.power);
-      if (next >= 0) hit(next);
-    }, getSettings().fastSpin ? 220 : 380);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocks, strikes, auto]);
-
-  const gap = 0;
-  const pickPos = target >= 0 ? { x: (target % MINE_COLS) * (size + gap), y: Math.floor(target / MINE_COLS) * (size + gap) } : null;
-
   return (
     <View style={styles.root}>
       <Panel style={styles.info}>
-        <Text style={styles.infoText}>
-          {pick.emoji} {pick.name} · сила {pick.power}
-        </Text>
-        {blocks && (
+        {phase === 'idle' ? (
+          <Text style={styles.infoText}>⛏️ Кирка падає за законами фізики й ламає блоки</Text>
+        ) : (
           <>
-            <View style={styles.energy}>
-              <View style={[styles.energyFill, { width: `${(strikes / STRIKES) * 100}%` }]} />
-            </View>
             <Text style={styles.infoText}>
-              Ударів: {strikes} · Знайдено: {show(runValue * runBet)}
+              {phase === 'roll' ? 'Рулетка кирок' : `${pick.name} · сила ${pick.power}`}
             </Text>
+            {phase === 'run' && (
+              <>
+                <View style={styles.energy}>
+                  <View style={[styles.energyFill, { width: `${(pickHp / pick.hp) * 100}%`, backgroundColor: pickHp / pick.hp < 0.3 ? colors.red : colors.green }]} />
+                </View>
+                <Text style={styles.infoText}>
+                  ❤ HP кирки: {pickHp}/{pick.hp} · Знайдено: {show(runValue * runBet)}
+                </Text>
+              </>
+            )}
           </>
         )}
       </Panel>
       <ResultLine text={message.text} tone={message.tone} />
-      {blocks ? (
+      {phase === 'roll' && <PickRoulette tier={tier} onDone={run} />}
+      {blocks && phase === 'run' ? (
         <View style={styles.mine}>
-          <View style={[styles.sky, { width: size * MINE_COLS }]}>
+          <View style={[styles.sky, { width: size * MINE_COLS, height: size * 1.4 }]}>
             {STARS.map((st, k) => (
               <View key={k} style={[styles.star, { left: `${st[0]}%`, top: `${st[1]}%`, opacity: st[2] }]} />
             ))}
@@ -306,71 +322,57 @@ export function MineGame({
           </View>
           <View style={[styles.grid, { width: size * MINE_COLS }]}>
             {blocks.map((b, i) => (
-              <BlockView
-                key={i}
-                block={b}
-                index={i}
-                size={size}
-                canHit={strikes > 0 && reachable(blocks, i)}
-                onPress={() => (auto ? setTarget(i) : hit(i))}
-                shakeKey={shakes[i] ?? 0}
-              />
+              <BlockView key={i} block={b} index={i} size={size} canHit onPress={NOOP} shakeKey={shakes[i] ?? 0} />
             ))}
-            {pickPos && strikes > 0 && <FlyingPick
-                x={pickPos.x}
-                y={pickPos.y}
-                size={size}
-                hitKey={hitKey}
-                tier={duel ? 0 : wallet.state.pickaxe}
-                hp={blocks[target] && !blocks[target].broken ? Math.max(1, Math.round((blocks[target].hp / BLOCKS[blocks[target].type].hp) * 100)) : null}
-              />}
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.pick, { width: size, height: size, transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}
+            >
+              <View style={[styles.hp, { top: -20, width: size * 1.6, left: -size * 0.3 }]}>
+                <Text style={styles.hpText}>❤ {pickHp}</Text>
+              </View>
+              <Animated.Image
+                source={PICKS[tier]}
+                style={{ width: size * 0.8, height: size * 0.8, transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}
+              />
+            </Animated.View>
           </View>
           <View style={styles.btnRow}>
-            <BigButton label={auto ? '⏸ ПАУЗА' : '▶ АВТО'} color={colors.blue} onPress={() => setAuto(!auto)} style={styles.half} />
-            <BigButton label="ЗАБРАТИ" color={colors.accent} onPress={() => finish(runValue)} style={styles.half} />
+            <BigButton label="⏩ ПРОПУСТИТИ" color={colors.blue} onPress={() => (play.current.skip = true)} style={styles.half} />
           </View>
         </View>
-      ) : duel ? (
-        <BigButton label="ПОЧАТИ ДУЕЛЬ" onPress={start} />
-      ) : (
-        <>
-          <BetSelector value={bet} onChange={setBet} />
-          <BigButton label={`У ШАХТУ · ${formatCoins(bet)}`} onPress={start} />
-          <Panel style={styles.upgrade}>
-            <Text style={styles.upTitle}>Кирки</Text>
-            {PICKAXES.map((p, i) => (
-              <Text key={p.name} style={[styles.upRow, i === wallet.state.pickaxe && styles.upActive]}>
-                {p.emoji} {p.name}: сила {p.power}
-                {i === wallet.state.pickaxe ? ' · твоя' : i > wallet.state.pickaxe ? ` · ${formatCoins(p.price)}` : ' ✓'}
-              </Text>
-            ))}
-            {nextPick && (
-              <BigButton
-                label={`КУПИТИ ${nextPick.name.toUpperCase()}`}
-                color={colors.blue}
-                disabled={wallet.state.balance < nextPick.price}
-                onPress={() => {
-                  if (wallet.buyPickaxe(wallet.state.pickaxe + 1)) {
-                    sfx('cash');
-                    wallet.notify(`Нова кирка: ${nextPick.name}!`);
-                  }
-                }}
-              />
-            )}
-          </Panel>
-          <Panel>
-            <Text style={styles.upTitle}>Що в шахті (× ставка)</Text>
-            {(['coal', 'iron', 'gold', 'diamond'] as const).map((t) => (
-              <Text key={t} style={styles.upRow}>
-                {BLOCKS[t].icon} {BLOCKS[t].name}: міцність {BLOCKS[t].hp}, ×{BLOCKS[t].value}
-              </Text>
-            ))}
-            <Text style={styles.upRow}>🧰 Скриня: випадковий приз до ×1.6</Text>
-            <Text style={styles.upRow}>🧨 Динаміт: підриває всі блоки навколо</Text>
-            <Text style={styles.upRow}>Бити можна лише блоки біля поверхні або поруч із викопаними. Що глибше, то більше руди.</Text>
-          </Panel>
-        </>
-      )}
+      ) : phase === 'idle' ? (
+        duel ? (
+          <BigButton label="ПОЧАТИ ДУЕЛЬ" onPress={start} />
+        ) : (
+          <>
+            <BetSelector value={bet} onChange={setBet} />
+            <BigButton label={`У ШАХТУ · ${formatCoins(bet)}`} onPress={start} />
+            <Panel style={styles.upgrade}>
+              <Text style={styles.upTitle}>Кирки (випадають у рулетці перед заїздом)</Text>
+              {PICK_TIERS.map((p, i) => (
+                <View key={p.name} style={styles.tierRow}>
+                  <Image source={PICKS[i]} style={{ width: 26, height: 26 }} />
+                  <Text style={styles.upRow}>
+                    {p.name}: ❤ {p.hp} HP, сила {p.power} · шанс {Math.round((p.weight / PICK_TIERS.reduce((s, t) => s + t.weight, 0)) * 100)}%
+                  </Text>
+                </View>
+              ))}
+            </Panel>
+            <Panel>
+              <Text style={styles.upTitle}>Що в шахті (× ставка)</Text>
+              {(['coal', 'iron', 'gold', 'diamond'] as const).map((t) => (
+                <Text key={t} style={styles.upRow}>
+                  {BLOCKS[t].icon} {BLOCKS[t].name}: міцність {BLOCKS[t].hp}, ×{+(BLOCKS[t].value * ORE_SCALE).toFixed(2)}
+                </Text>
+              ))}
+              <Text style={styles.upRow}>🧰 Скриня: випадковий приз до ×{+(1.6 * ORE_SCALE).toFixed(1)}</Text>
+              <Text style={styles.upRow}>🧨 Динаміт: підриває всі блоки навколо</Text>
+              <Text style={styles.upRow}>Кожен удар забирає в кирки HP. Пробився до дна: бонус ×{BOTTOM_BONUS}.</Text>
+            </Panel>
+          </>
+        )
+      ) : null}
     </View>
   );
 }
@@ -411,4 +413,11 @@ const styles = StyleSheet.create({
   upTitle: { color: colors.gold, fontWeight: '900', fontSize: 15, marginBottom: 4 },
   upRow: { color: colors.text, fontSize: 13 },
   upActive: { color: colors.gold, fontWeight: '800' },
+  tierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  roll: { gap: 10, alignItems: 'center' },
+  rollWindow: { height: 96, overflow: 'hidden', borderRadius: 14, backgroundColor: '#0B0B14', borderWidth: 2, borderColor: colors.gold },
+  rollStrip: { flexDirection: 'row', position: 'absolute', left: 0, top: 8 },
+  rollItem: { width: ROLL_ITEM - 6, height: 76, marginHorizontal: 3, borderRadius: 12, borderWidth: 2, backgroundColor: '#1A1530', alignItems: 'center', justifyContent: 'center' },
+  rollHp: { fontSize: 11, fontWeight: '900' },
+  rollPointer: { position: 'absolute', top: 0, bottom: 0, width: 4, backgroundColor: colors.gold },
 });

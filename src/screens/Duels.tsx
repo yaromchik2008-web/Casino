@@ -293,7 +293,7 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
           <Text style={styles.mutedCenter}>Цієї гри вже немає. Онови застосунок</Text>
         ) : game.kind === 'dig' ? (
           <>
-            <Text style={styles.mutedCenter}>Один заїзд дерев'яною киркою, кирка копає сама. «Забрати» завершує раунд.</Text>
+            <Text style={styles.mutedCenter}>Один заїзд: рулетка дає кирку, і вона падає в шахту сама. Хто знайде більше, той виграв.</Text>
             <MineGame game={game} duel={finish} onProgress={(p) => (progress.current = p)} autoStart />
           </>
         ) : (
@@ -332,8 +332,13 @@ function SlotDuel({
 
   const spin = () => {
     if (spinning || left <= 0) return;
-    const result = spinGrid(config);
-    const { win } = evaluateGrid(config, result, DUEL_SPIN_BET);
+    // У дуелі шанси підкручені: порожній оберт перекидається до 3 разів, тож очки бувають майже завжди.
+    let result = spinGrid(config);
+    let win = evaluateGrid(config, result, DUEL_SPIN_BET).win;
+    for (let k = 0; k < 3 && win === 0; k++) {
+      result = spinGrid(config);
+      win = evaluateGrid(config, result, DUEL_SPIN_BET).win;
+    }
     setGrid(result);
     setSpinning(true);
     sfx('spin', 0.5);

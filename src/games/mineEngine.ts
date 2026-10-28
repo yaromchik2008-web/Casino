@@ -153,3 +153,141 @@ export function autoTarget(blocks: Block[], power: number, rand: () => number = 
   });
   return best;
 }
+
+// ───────────── Фізичний заїзд: кирка падає, відскакує від блоків і ламає їх, поки в неї є HP ─────────────
+
+export const PICK_TIERS = [
+  { name: "Дерев'яна кирка", hp: 50, power: 4, weight: 55, color: '#B7834B' },
+  { name: "Кам'яна кирка", hp: 65, power: 5, weight: 28, color: '#9CA3AF' },
+  { name: 'Залізна кирка', hp: 85, power: 6, weight: 13, color: '#E5E7EB' },
+  { name: 'Алмазна кирка', hp: 110, power: 8, weight: 4, color: '#4FE3E3' },
+];
+
+/** Скільки HP кирки забирає один удар по блоку. */
+export const HIT_COST: Record<BlockType, number> = { dirt: 2, stone: 3, coal: 3, iron: 4, gold: 4, diamond: 5, chest: 1, tnt: 1 };
+/** Множник цінності руди у фізичному заїзді (підібраний симуляцією). */
+export let ORE_SCALE = 4.2; // RTP ≈ 0.89 з урахуванням шансів рулетки
+export function setOreScale(k: number) {
+  ORE_SCALE = k;
+}
+/** Бонус × ставка, якщо кирка пробилась до самого низу. */
+export const BOTTOM_BONUS = 1;
+
+export function rollPick(rand: () => number = Math.random): number {
+  const total = PICK_TIERS.reduce((s, p) => s + p.weight, 0);
+  let r = rand() * total;
+  for (let i = 0; i < PICK_TIERS.length; i++) {
+    r -= PICK_TIERS[i].weight;
+    if (r < 0) return i;
+  }
+  return 0;
+}
+
+export const PICK_R = 0.32;
+export const FPS = 30;
+
+export interface RunHit {
+  frame: number;
+  index: number;
+  pickHp: number;
+  broken: number[];
+  value: number; // × ставка, уже з ORE_SCALE
+  exploded: boolean;
+}
+
+export interface MineRun {
+  frames: number[]; // x, y, кут (градуси) на кожен кадр
+  hits: RunHit[];
+  value: number;
+  bottom: boolean;
+}
+
+/** Повністю прораховує заїзд наперед: інтерфейс лише програє кадри. */
+export function simulateRun(start: Block[], tier: number, rand: () => number = Math.random): MineRun {
+  const pick = PICK_TIERS[tier];
+  const blocks = start.map((b) => ({ ...b }));
+  const G = 28;
+  const SUB = 8;
+  const dt = 1 / (FPS * SUB);
+  const r = PICK_R;
+  let x = 0.8 + rand() * (MINE_COLS - 1.6);
+  let y = -1.2;
+  let vx = (rand() - 0.5) * 3;
+  let vy = 0;
+  let angle = 0;
+  let hp = pick.hp;
+  let cooldown = 0;
+  let value = 0;
+  let bottom = false;
+  const frames: number[] = [];
+  const hits: RunHit[] = [];
+  for (let frame = 0; frame < FPS * 60; frame++) {
+    for (let s = 0; s < SUB; s++) {
+      vy += G * dt;
+      x += vx * dt;
+      y += vy * dt;
+      angle += vx * 220 * dt + 160 * dt;
+      cooldown -= dt;
+      if (x < r) {
+        x = r;
+        vx = Math.abs(vx) * 0.6;
+      } else if (x > MINE_COLS - r) {
+        x = MINE_COLS - r;
+        vx = -Math.abs(vx) * 0.6;
+      }
+      const c0 = Math.floor(x - r);
+      const r0 = Math.floor(y - r);
+      for (let row = r0; row <= r0 + 1; row++) {
+        if (row < 0 || row >= MINE_ROWS) continue;
+        for (let col = c0; col <= c0 + 1; col++) {
+          if (col < 0 || col >= MINE_COLS) continue;
+          const i = row * MINE_COLS + col;
+          if (blocks[i].broken) continue;
+          const nx0 = Math.min(Math.max(x, col), col + 1);
+          const ny0 = Math.min(Math.max(y, row), row + 1);
+          let dx = x - nx0;
+          let dy = y - ny0;
+          let d = Math.hypot(dx, dy);
+          if (d >= r) continue;
+          if (d < 1e-6) {
+            dx = 0;
+            dy = -1;
+            d = 1;
+          }
+          const nx = dx / d;
+          const ny = dy / d;
+          x = nx0 + nx * r;
+          y = ny0 + ny * r;
+          const vn = vx * nx + vy * ny;
+          if (vn < 0) {
+            vx -= 1.5 * vn * nx;
+            vy -= 1.5 * vn * ny;
+          }
+          // Удар зверху: кирка б'є блок і підстрибує, тому ніколи не завмирає.
+          if (ny < -0.5) {
+            vy = -(3.5 + rand() * 2.5);
+            vx = Math.max(-5, Math.min(5, vx + (rand() - 0.5) * 4));
+          }
+          if (cooldown <= 0 && (vn < -1 || ny < -0.5)) {
+            cooldown = 0.12;
+            const res = strike(blocks, i, pick.power);
+            for (let k = 0; k < blocks.length; k++) blocks[k] = res.blocks[k];
+            hp = Math.max(0, hp - HIT_COST[start[i].type]);
+            const v = res.value * ORE_SCALE;
+            value += v;
+            hits.push({ frame, index: i, pickHp: hp, broken: res.broken, value: v, exploded: res.exploded });
+          }
+        }
+      }
+      if (hp <= 0 || y > MINE_ROWS + 1) break;
+    }
+    frames.push(x, y, angle % 360);
+    if (y > MINE_ROWS + 1) {
+      bottom = true;
+      value += BOTTOM_BONUS;
+      break;
+    }
+    if (hp <= 0) break;
+  }
+  return { frames, hits, value, bottom };
+}

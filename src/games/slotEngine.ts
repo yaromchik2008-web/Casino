@@ -126,7 +126,7 @@ export function classicSymbols(emojis: string[]): SlotSymbol[] {
 }
 
 // 5-барабанний набір: 6 звичайних символів, wild і scatter.
-export function videoSymbols(emojis: string[], wild: string, scatter: string): SlotSymbol[] {
+export function videoSymbols(emojis: string[], wild: string, scatter: string, payScale = 0.71): SlotSymbol[] {
   const weights = [22, 20, 18, 12, 9, 6];
   const pays = [
     [6, 15, 45],
@@ -137,9 +137,9 @@ export function videoSymbols(emojis: string[], wild: string, scatter: string): S
     [45, 150, 600],
   ];
   return [
-    // ×0.95: RTP ≈ 0.89 з фриспінами.
-    ...emojis.map((emoji, i) => ({ id: `v${i}`, emoji, weight: weights[i], pays: pays[i].map((p) => Math.round(p * 0.95 * 10) / 10) })),
+    // ×0.71 і scatter вагою 4: бонус приблизно раз на 42 оберти, RTP ≈ 0.89 з фриспінами (і з колесом Карася).
+    ...emojis.map((emoji, i) => ({ id: `v${i}`, emoji, weight: weights[i], pays: pays[i].map((p) => Math.round(p * payScale * 10) / 10) })),
     { id: 'wild', emoji: wild, weight: 3, pays: [60, 240, 900] },
-    { id: 'scatter', emoji: scatter, weight: 3, pays: [] },
+    { id: 'scatter', emoji: scatter, weight: 4, pays: [] },
   ];
 }

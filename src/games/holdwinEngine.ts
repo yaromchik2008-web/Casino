@@ -4,7 +4,7 @@ export const HW_COLS = 5;
 export const HW_ROWS = 5; // повне поле бонуса; основна гра бачить нижні 3 ряди
 export const BASE_ROWS = 3;
 export const TRIGGER_COINS = 6;
-export const BASE_COIN_CHANCE = 0.125; // RTP ≈ 0.91 при виплатах ×0.8 (симуляція: лінії 0.43 + бонус 0.48, бонус ≈ 1 на 140 обертів)
+export const BASE_COIN_CHANCE = 0.135; // RTP ≈ 0.90 при виплатах ×0.5 (симуляція: лінії 0.24 + бонус 0.66, бонус ≈ 1 на 98 обертів)
 export const RESPINS = 3;
 export const UNLOCK_AT = [5, 10]; // нових монет, щоб відкрити 4-й і 5-й ряд
 

@@ -4,11 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { telegramName, telegramStartParam } from '../telegram';
 import { formatCoins } from '../theme';
-import { claimReferral, claimTransfers, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
+import { sfx } from '../audio/sound';
+import { claimReferral, claimTransfers, inboxSince, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
 import { assetsValue, statusFor } from './shop';
 import { useWallet } from './WalletContext';
 
 const SYNC_MS = 30000;
+const INBOX_MS = 8000;
 const REF_DONE = 'freecasino:ref-done';
 
 // Код друга з посилання-запрошення: t.me/бот?startapp=ref_КОД або сайт ?ref=КОД.
@@ -63,11 +65,31 @@ export function useFriendSync() {
         // Без мережі просто пропускаємо цей раз.
       }
     };
+    // Спливаюче сповіщення, коли хтось пише або кличе на дуель.
+    let since: string | null = null;
+    const inbox = async () => {
+      if (!myProfile()) return;
+      try {
+        const r = await inboxSince(since);
+        since = r.latest;
+        const last = r.items[r.items.length - 1];
+        if (!last || stopped) return;
+        const text = last.body.startsWith('⚔️')
+          ? `⚔️ ${last.name} кличе тебе на дуель! Зайди в «Друзі»`
+          : `💬 ${last.name}: ${last.body.slice(0, 80)}`;
+        ref.current.notify(r.items.length > 1 ? `${text} (+ ще ${r.items.length - 1})` : text);
+        sfx('bonus', 0.5);
+      } catch {
+        // Пропускаємо до наступного разу.
+      }
+    };
     tick();
     const t = setInterval(tick, SYNC_MS);
+    const ib = setInterval(inbox, INBOX_MS);
     return () => {
       stopped = true;
       clearInterval(t);
+      clearInterval(ib);
     };
   }, [wallet.loaded]);
 }

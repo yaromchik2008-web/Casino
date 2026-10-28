@@ -61,11 +61,11 @@ function video(emojis: string[], wild: string, scatter: string): SlotConfig {
   return { reels: 5, symbols: videoSymbols(emojis, wild, scatter), wild: 'wild', scatter: 'scatter' };
 }
 
-// Основна гра «Утримай і виграй»: без скатерів, бонус запускають монети (RTP ≈ 0.91, див. holdwinEngine).
+// Основна гра «Утримай і виграй»: без скатерів, бонус запускають монети (RTP ≈ 0.90, див. holdwinEngine).
 function holdwin(emojis: string[], wild: string): SlotConfig {
-  const symbols = videoSymbols(emojis, wild, '')
+  const symbols = videoSymbols(emojis, wild, '', 0.95)
     .filter((x) => x.id !== 'scatter')
-    .map((x) => ({ ...x, pays: x.pays.map((p) => Math.round(p * 0.8 * 10) / 10) }));
+    .map((x) => ({ ...x, pays: x.pays.map((p) => Math.round(p * 0.5 * 10) / 10) }));
   return { reels: 5, symbols, wild: 'wild' };
 }
 
@@ -73,7 +73,7 @@ function holdwin(emojis: string[], wild: string): SlotConfig {
 function tumble(emojis: string[], scatter: string, scale: number, baseBombs: number, freeBombs: number, buyCost: number): TumbleConfig {
   return {
     symbols: tumbleSymbols(emojis, scale),
-    scatter: { emoji: scatter, weight: 2, weightFree: 2 },
+    scatter: { emoji: scatter, weight: 2.6, weightFree: 2.6 },
     bomb: { emoji: '💣', weightBase: baseBombs, weightFree: freeBombs },
     freeSpins: 10,
     retrigger: 5,
@@ -105,7 +105,7 @@ export const GAMES: GameInfo[] = [
     tag: 'NEW',
     slot: video(['😄', '🎣', '🥵', '🧥', '🏖️', '😎'], '🐟', '🎰'),
     art: KARAS_ART,
-    description: 'Наш фірмовий слот. Карась-wild замінює всіх, 3+ «БОНУС» запускають Колесо фортуни з мегапризом Mercedes Sprinter 3.0. Тінь платить до ×570.',
+    description: 'Наш фірмовий слот. Карась-wild замінює всіх, 3+ «БОНУС» запускають Колесо фортуни з мегапризом Mercedes Sprinter 3.0. Тінь платить до ×426.',
   },
   {
     id: 'fruit-classic',
@@ -198,7 +198,7 @@ export const GAMES: GameInfo[] = [
     kind: 'tumble',
     categories: ['special', 'slots', 'popular'],
     tag: 'HOT',
-    tumble: tumble(['🍬', '🍪', '🍩', '🧁', '🍫', '🍰', '🍦', '🎂', '💗'], '🍭', 1.38, 0.13, 7, 70),
+    tumble: tumble(['🍬', '🍪', '🍩', '🧁', '🍫', '🍰', '🍦', '🎂', '💗'], '🍭', 1.18, 0.13, 4, 45),
     description: '8+ однакових будь-де виграють і лопаються. 4+ 🍭 дають 10 фриспінів, 💣 множать виграш до ×100.',
   },
   {
@@ -210,7 +210,7 @@ export const GAMES: GameInfo[] = [
     kind: 'tumble',
     categories: ['special', 'slots', 'new', 'popular'],
     tag: 'NEW',
-    tumble: tumble(['🫐', '🍋', '🍏', '🍑', '🍇', '🍉', '🍓', '🍒', '❤️'], '⭐', 1.7, 0, 9, 90),
+    tumble: tumble(['🫐', '🍋', '🍏', '🍑', '🍇', '🍉', '🍓', '🍒', '❤️'], '⭐', 1.35, 0, 3.5, 47),
     description: 'Каскади фруктів: 8+ однакових будь-де. 4+ ⭐ дають 10 фриспінів з бомбами-множниками.',
   },
   {
@@ -278,7 +278,7 @@ export const GAMES: GameInfo[] = [
     kind: 'dig',
     categories: ['fast', 'new', 'popular'],
     tag: 'NEW',
-    description: 'Розбивай блоки киркою, шукай золото, діаманти і скрині. Динаміт підриває все навколо.',
+    description: 'Кирка падає в шахту й ламає блоки, поки в неї є HP. Шукай золото, діаманти і скрині.',
   },
   {
     id: 'crash',
