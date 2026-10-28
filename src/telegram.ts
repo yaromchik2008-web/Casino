@@ -11,6 +11,10 @@ interface TelegramWebApp {
   setHeaderColor: (c: string) => void;
   setBackgroundColor: (c: string) => void;
   disableVerticalSwipes?: () => void;
+  CloudStorage?: {
+    setItem: (key: string, value: string, cb?: (err: string | null, ok?: boolean) => void) => void;
+    getItem: (key: string, cb: (err: string | null, value?: string) => void) => void;
+  };
   BackButton: { show: () => void; hide: () => void; onClick: (cb: () => void) => void; offClick: (cb: () => void) => void };
   HapticFeedback: {
     impactOccurred: (style: 'light' | 'medium' | 'heavy') => void;
@@ -88,4 +92,41 @@ export function setTelegramBack(handler: (() => void) | null): () => void {
   tg.BackButton.onClick(handler);
   tg.BackButton.show();
   return () => tg.BackButton.offClick(handler);
+}
+
+// Хмарне сховище Telegram: зберігається для гравця на всіх його пристроях і не зникає,
+// коли айфон чистить пам'ять вбудованого браузера.
+export function cloudGet(key: string): Promise<string | null> {
+  const tg = current();
+  if (!tg?.CloudStorage || !tg.isVersionAtLeast('6.9')) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      tg.CloudStorage!.getItem(key, (err, value) => resolve(err ? null : value || null));
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export function cloudSet(key: string, value: string): Promise<void> {
+  const tg = current();
+  if (!tg?.CloudStorage || !tg.isVersionAtLeast('6.9')) return Promise.resolve();
+  return new Promise((resolve) => {
+    try {
+      tg.CloudStorage!.setItem(key, value, () => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+/** Чекає, поки підвантажиться скрипт Telegram (до 3 с), щоб знати, чи ми в міні-аппі. */
+export async function waitTelegram(ms = 3000): Promise<boolean> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return false;
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (window.Telegram?.WebApp) return !!current();
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return !!current();
 }

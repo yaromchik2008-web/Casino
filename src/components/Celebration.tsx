@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { sfx } from '../audio/sound';
+import { getSettings, sfx } from '../audio/sound';
 import { colors, formatCoins } from '../theme';
 
 export type CelebrationSpec =
@@ -67,8 +67,9 @@ const COINS = 22;
 
 export function CoinRain({ emoji = '🪙', count = COINS }: { emoji?: string; count?: number }) {
   const { width, height } = useWindowDimensions();
+  const n = getSettings().lite ? Math.min(6, count) : count;
   const drops = useRef(
-    Array.from({ length: count }, () => ({
+    Array.from({ length: n }, () => ({
       x: Math.random(),
       delay: Math.random() * 1400,
       dur: 1300 + Math.random() * 1200,
@@ -115,6 +116,7 @@ function WinBody({ amount, title }: { amount: number; title: string }) {
   const value = useCountUp(amount, 2200);
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
+    if (getSettings().lite) return;
     const a = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, { toValue: 1, duration: 500, useNativeDriver: true }),

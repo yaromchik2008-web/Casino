@@ -14,6 +14,7 @@ import { ProfileScreen } from './src/screens/ProfileScreen';
 import { ShopScreen } from './src/screens/ShopScreen';
 import { SportsScreen } from './src/screens/SportsScreen';
 import { TournamentsScreen } from './src/screens/TournamentsScreen';
+import { useKeyboardViewport } from './src/viewport';
 import { useFriendSync } from './src/state/useFriendSync';
 import { WalletProvider, useWallet } from './src/state/WalletContext';
 import { initTelegram, setTelegramBack } from './src/telegram';
@@ -62,6 +63,7 @@ function Shell() {
   const game = gameId ? findGame(gameId) : undefined;
   const fade = useRef(new Animated.Value(1)).current;
   useFriendSync();
+  const keyboard = useKeyboardViewport();
 
   useEffect(() => {
     initSound();
@@ -83,6 +85,7 @@ function Shell() {
   }, [wallet.notify]);
 
   useEffect(() => {
+    if (getSettings().lite) return;
     fade.setValue(0);
     Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
   }, [tab, gameId, fade]);
@@ -161,7 +164,7 @@ function Shell() {
         </View>
       )}
 
-      {!game && (
+      {!game && !keyboard && (
         <SafeAreaView edges={['bottom']} style={styles.tabBar}>
           {TABS.map((t) => {
             const active = tab === t.id || (t.id === 'bonuses' && tab === 'tournaments');

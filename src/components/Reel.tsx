@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View, ViewStyle } from 'react-native';
+import { getSettings } from '../audio/sound';
 import { colors } from '../theme';
 
 const STRIP = 6;
@@ -92,7 +93,7 @@ export function WinCell({
 }) {
   const pulse = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!win) {
+    if (!win || getSettings().lite) {
       pulse.setValue(0);
       return;
     }

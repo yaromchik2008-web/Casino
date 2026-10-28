@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GameInfo } from '../games/catalog';
 import { colors } from '../theme';
 
@@ -22,7 +22,11 @@ export function GameTile({
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ width }, pressed && styles.pressed]}>
       <LinearGradient colors={game.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.tile, { height: width * 1.2 }]}>
-        <Text style={[styles.emoji, { fontSize: width * 0.42 }]}>{game.emoji}</Text>
+        {game.art?.wild ? (
+          <Image source={game.art.wild} style={[styles.emoji, { width: width * 0.62, height: width * 0.62, borderRadius: width * 0.12 }]} />
+        ) : (
+          <Text style={[styles.emoji, { fontSize: width * 0.42 }]}>{game.emoji}</Text>
+        )}
         {game.tag && (
           <View style={[styles.tag, { backgroundColor: TAG_COLORS[game.tag] }]}>
             <Text style={styles.tagText}>{TAG_LABELS[game.tag]}</Text>

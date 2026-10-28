@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Image, ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { GameTile } from '../components/GameTile';
 import { CATEGORIES, Category, GAMES, GameInfo, findGame } from '../games/catalog';
 import { useWallet } from '../state/WalletContext';
@@ -37,7 +37,22 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
     });
   }, [category, query, wallet.state.favorites]);
 
-  const banners = [
+  const banners: {
+    title: string;
+    text: string;
+    colors: readonly [string, string];
+    emoji: string;
+    image?: ImageSourcePropType;
+    action: () => void;
+  }[] = [
+    {
+      title: 'Нове: Золотий Карась',
+      text: 'Наш фірмовий слот з друзями-персонажами і фриспінами',
+      colors: ['#FFC83D', '#14102A'] as const,
+      emoji: '🐟',
+      image: findGame('golden-karas')?.art?.v5,
+      action: () => onOpenGame('golden-karas'),
+    },
     {
       title: 'Щоденний бонус',
       text: 'Заходь щодня і забирай до 100 ₴',
@@ -113,7 +128,7 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
                 <Text style={styles.bannerTitle}>{b.title}</Text>
                 <Text style={styles.bannerSub}>{b.text}</Text>
               </View>
-              <Text style={styles.bannerEmoji}>{b.emoji}</Text>
+              {b.image ? <Image source={b.image} style={styles.bannerImage} /> : <Text style={styles.bannerEmoji}>{b.emoji}</Text>}
             </LinearGradient>
           </Pressable>
         ))}
@@ -190,6 +205,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32, gap: 14, alignItems: 'center' },
   banner: { height: 130, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', marginRight: 0 },
+  bannerImage: { width: 92, height: 92, borderRadius: 18, borderWidth: 3, borderColor: '#FFC83D' },
   bannerText: { flex: 1, gap: 6 },
   bannerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
   bannerSub: { color: '#FFFFFFDD', fontSize: 13 },

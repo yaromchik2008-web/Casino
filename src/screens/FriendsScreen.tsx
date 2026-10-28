@@ -4,9 +4,12 @@ import { sfx } from '../audio/sound';
 import { BigButton, Chip, Panel, parseMoney } from '../components/ui';
 import { friendsEnabled } from '../config';
 import {
+  Duel,
   Message,
   Profile,
   addFriend,
+  claimTransfers,
+  listDuels,
   friendlyError,
   listFriends,
   loadMessages,
@@ -18,6 +21,7 @@ import {
   syncProfile,
 } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
+import { DuelList, DuelPlay, DuelSetup } from './Duels';
 import { telegramName } from '../telegram';
 import { colors, formatCoins } from '../theme';
 
@@ -36,6 +40,7 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
   const [text, setText] = useState('');
   const [amount, setAmount] = useState('');
   const [showSend, setShowSend] = useState(false);
+  const [showDuel, setShowDuel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -115,6 +120,18 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
         })}
       </ScrollView>
       {error && <Text style={styles.error}>{error}</Text>}
+      {showDuel && (
+        <DuelSetup
+          friend={friend}
+          onDone={(e) => {
+            setError(e ?? null);
+            if (!e) {
+              setShowDuel(false);
+              refresh();
+            }
+          }}
+        />
+      )}
       {showSend && (
         <View style={[styles.sendRow, styles.pad]}>
           <TextInput
@@ -129,8 +146,11 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
         </View>
       )}
       <View style={[styles.sendRow, styles.pad]}>
-        <Pressable onPress={() => setShowSend(!showSend)} style={styles.gift}>
+        <Pressable onPress={() => (setShowSend(!showSend), setShowDuel(false))} style={styles.gift}>
           <Text style={styles.giftText}>🎁</Text>
+        </Pressable>
+        <Pressable onPress={() => (setShowDuel(!showDuel), setShowSend(false))} style={styles.gift}>
+          <Text style={styles.giftText}>⚔️</Text>
         </Pressable>
         <TextInput
           value={text}
@@ -170,11 +190,30 @@ export function FriendsScreen() {
   const [editName, setEditName] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chat, setChat] = useState<Profile | null>(null);
+  const [duels, setDuels] = useState<Duel[]>([]);
+  const [playing, setPlaying] = useState<Duel | null>(null);
 
   const refresh = useCallback(() => {
     listFriends()
       .then(setFriends)
       .catch((e) => setError(friendlyError(e)));
+  }, []);
+
+  // Дуелі оновлюються частіше, а виграш чи повернення ставки зараховується одразу.
+  const refreshDuels = useCallback(() => {
+    listDuels()
+      .then(setDuels)
+      .catch(() => {});
+    claimTransfers()
+      .then((got) => {
+        if (got > 0) {
+          wallet.credit(got);
+          sfx('cash');
+          wallet.notify(`Зараховано ${formatCoins(got)}`);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -184,11 +223,13 @@ export function FriendsScreen() {
         setMe(p);
         setName(p.name);
         refresh();
+        refreshDuels();
       })
       .catch((e) => setError(friendlyError(e)));
     const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
-  }, [refresh]);
+    const d = setInterval(refreshDuels, 5000);
+    return () => (clearInterval(t), clearInterval(d));
+  }, [refresh, refreshDuels]);
 
   if (!friendsEnabled()) {
     return (
@@ -202,6 +243,17 @@ export function FriendsScreen() {
           </Text>
         </Panel>
       </ScrollView>
+    );
+  }
+
+  if (playing) {
+    const other = playing.challenger === me?.id ? playing.opponent : playing.challenger;
+    return (
+      <DuelPlay
+        duel={playing}
+        opponentName={friends.find((f) => f.id === other)?.name ?? 'Друг'}
+        onClose={() => (setPlaying(null), refreshDuels())}
+      />
     );
   }
 
@@ -263,6 +315,8 @@ export function FriendsScreen() {
         </View>
         {error && <Text style={styles.error}>{error}</Text>}
       </Panel>
+
+      <DuelList duels={duels} friends={friends} onPlay={setPlaying} onChanged={refreshDuels} onError={setError} />
 
       <Text style={styles.title}>Друзі ({friends.length})</Text>
       {friends.length === 0 && <Text style={styles.empty}>Поки нікого. Додай друга за кодом!</Text>}

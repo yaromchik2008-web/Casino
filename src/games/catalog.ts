@@ -1,3 +1,4 @@
+import type { ImageSourcePropType } from 'react-native';
 import type { MusicId } from '../audio/assets';
 import { SlotConfig, classicSymbols, videoSymbols } from './slotEngine';
 import { TumbleConfig, tumbleSymbols } from './tumbleEngine';
@@ -44,6 +45,8 @@ export interface GameInfo {
   tumble?: TumbleConfig;
   music: MusicId;
   description: string;
+  /** Картинки замість емодзі: id символу → зображення. */
+  art?: Record<string, ImageSourcePropType>;
 }
 
 function classic(emojis: string[], jackpot = false): SlotConfig {
@@ -75,7 +78,32 @@ function tumble(emojis: string[], scatter: string, scale: number, baseBombs: num
   };
 }
 
+// Персонажі «Золотого Карася» намальовані для Casino Victor (assets/karas).
+const KARAS_ART: Record<string, ImageSourcePropType> = {
+  v0: require('../../assets/karas/smile.png'),
+  v1: require('../../assets/karas/fisher.png'),
+  v2: require('../../assets/karas/burn.png'),
+  v3: require('../../assets/karas/hood.png'),
+  v4: require('../../assets/karas/beach.png'),
+  v5: require('../../assets/karas/shades.png'),
+  wild: require('../../assets/karas/karas.png'),
+  scatter: require('../../assets/karas/scatter.png'),
+};
+
 export const GAMES: GameInfo[] = [
+  {
+    id: 'golden-karas',
+    music: 'ocean',
+    title: 'Золотий Карась',
+    emoji: '🐟',
+    colors: ['#FFC83D', '#14102A'],
+    kind: 'slot',
+    categories: ['new', 'popular', 'slots'],
+    tag: 'NEW',
+    slot: video(['😄', '🎣', '🥵', '🧥', '🏖️', '😎'], '🐟', '🎰'),
+    art: KARAS_ART,
+    description: 'Наш фірмовий слот. Карась-wild замінює всіх, 3+ «БОНУС» дають фриспіни. Тінь платить до ×570.',
+  },
   {
     id: 'fruit-classic',
     music: 'classic',

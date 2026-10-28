@@ -34,7 +34,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
   useEffect(() => () => void (alive.current = false), []);
 
   const size = Math.floor(Math.min(56, (Math.min(width, 480) - 48 - (COLS - 1) * 4) / COLS));
-  const speed = settings.fastSpin ? 0.5 : 1;
+  const speed = settings.fastSpin ? 0.5 : settings.lite ? 0.75 : 1;
 
   const symbolOf = (id: string) => config.symbols.find((s) => s.id === id)!;
   const emojiOf = (c: Cell) => (c.kind === 'sym' ? symbolOf(c.id).emoji : c.kind === 'scatter' ? config.scatter.emoji : config.bomb.emoji);

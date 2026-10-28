@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sfx, useSettings } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
 import { Reel } from '../components/Reel';
@@ -143,7 +143,14 @@ export function SlotGame({ game }: { game: GameInfo }) {
               win={highlight[i]}
               randomItem={() => randomSymbol(config)}
               speed={settings.fastSpin ? 160 : 240}
-              render={(s) => <Text style={{ fontSize: size * 0.55 }}>{s.emoji}</Text>}
+              cellStyle={game.art ? styles.artCell : undefined}
+              render={(s) =>
+                game.art?.[s.id] ? (
+                  <Image source={game.art[s.id]} style={{ width: size - 6, height: size - 6, borderRadius: 9 }} />
+                ) : (
+                  <Text style={{ fontSize: size * 0.55 }}>{s.emoji}</Text>
+                )
+              }
             />
           ))}
         </View>
@@ -161,19 +168,19 @@ export function SlotGame({ game }: { game: GameInfo }) {
         <Chip label={auto > 0 ? `Стоп (${auto})` : 'Авто ×10'} active={auto > 0} onPress={() => setAuto(auto > 0 ? 0 : 10)} />
         <Chip label="Авто ×50" onPress={() => setAuto(50)} disabled={auto > 0} />
       </View>
-      <Paytable config={config} />
+      <Paytable config={config} art={game.art} />
     </View>
   );
 }
 
-function Paytable({ config }: { config: SlotConfig }) {
+function Paytable({ config, art }: { config: SlotConfig; art?: GameInfo['art'] }) {
   const lines = paylines(config).length;
   return (
     <View style={styles.paytable}>
       <Text style={styles.payTitle}>Виплати (× ставка на лінію, ліній: {lines})</Text>
       {[...config.symbols].reverse().map((s) => (
         <View key={s.id} style={styles.payRow}>
-          <Text style={styles.payEmoji}>{s.emoji}</Text>
+          {art?.[s.id] ? <Image source={art[s.id]} style={styles.payImage} /> : <Text style={styles.payEmoji}>{s.emoji}</Text>}
           <Text style={styles.payText}>
             {s.id === config.scatter
               ? '3/4/5 будь-де: ×5/×20/×100 ставки + фриспіни'
@@ -226,6 +233,8 @@ const styles = StyleSheet.create({
   paytable: { width: '100%', backgroundColor: colors.surface, borderRadius: 16, padding: 12, gap: 4 },
   payTitle: { color: colors.muted, fontSize: 12, fontWeight: '700', marginBottom: 4 },
   payRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  payImage: { width: 32, height: 32, borderRadius: 6 },
+  artCell: { backgroundColor: '#FFF6E0', borderRadius: 12, overflow: 'hidden' },
   payEmoji: { fontSize: 22, width: 32, textAlign: 'center' },
   payText: { color: colors.text, fontSize: 13, flex: 1 },
 });

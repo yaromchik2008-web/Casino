@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, friendsEnabled } from '../config';
+import { cloudGet, cloudSet, waitTelegram } from '../telegram';
+
+const CLOUD_KEY = 'sb_refresh';
 
 export interface Profile {
   id: string;
@@ -18,6 +21,22 @@ export interface Message {
   receiver: string;
   body: string;
   created_at: string;
+}
+
+export type DuelStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'finished';
+
+export interface Duel {
+  id: number;
+  challenger: string;
+  opponent: string;
+  game: string;
+  stake: number;
+  status: DuelStatus;
+  challenger_score: number | null;
+  opponent_score: number | null;
+  winner: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 let client: SupabaseClient | null = null;
@@ -44,12 +63,18 @@ const ERRORS: Record<string, string> = {
   not_friends: 'Ви ще не друзі',
   daily_limit: 'Ліміт: 10 000 ₴ на добу',
   bad_amount: 'Невірна сума',
+  duel_closed: 'Ця дуель уже закрита',
+  already_played: 'Ти вже зіграв свій раунд',
+  too_many_duels: 'Забагато відкритих дуелей (до 10)',
+  duels_check: 'Ставка від 1 до 10 000 ₴',
 };
 
 export function friendlyError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
   for (const k of Object.keys(ERRORS)) if (msg.includes(k)) return ERRORS[k];
   if (msg.toLowerCase().includes('anonymous')) return 'На сервері не ввімкнено анонімний вхід';
+  if (msg.includes('duel') && (msg.includes('schema cache') || msg.includes('does not exist')))
+    return 'На сервері ще не запущено SQL з docs/supabase-duels.sql';
   if (msg.includes('schema cache') || msg.includes('does not exist')) return 'На сервері ще не запущено SQL з docs/supabase.sql';
   return 'Немає зв’язку з сервером. Спробуй пізніше';
 }
@@ -61,11 +86,26 @@ export function startFriends(defaultName: string): Promise<Profile> {
   if (starting) return starting;
   starting = (async () => {
     const sb = db();
+    const inTelegram = await waitTelegram();
     let { data } = await sb.auth.getSession();
+    if (!data.session && inTelegram) {
+      // Той самий акаунт, навіть якщо Telegram очистив пам'ять або це інший телефон.
+      const saved = await cloudGet(CLOUD_KEY);
+      if (saved) {
+        const res = await sb.auth.refreshSession({ refresh_token: saved });
+        if (!res.error && res.data.session) data = { session: res.data.session };
+      }
+    }
     if (!data.session) {
       const res = await sb.auth.signInAnonymously();
       if (res.error) throw res.error;
       data = { session: res.data.session! };
+    }
+    if (inTelegram) {
+      cloudSet(CLOUD_KEY, data.session!.refresh_token);
+      sb.auth.onAuthStateChange((_event, session) => {
+        if (session?.refresh_token) cloudSet(CLOUD_KEY, session.refresh_token);
+      });
     }
     const uid = data.session!.user.id;
     const existing = await sb.from('profiles').select('*').eq('id', uid).maybeSingle();
@@ -156,4 +196,37 @@ export async function claimTransfers(): Promise<number> {
   const { data, error } = await db().rpc('claim_transfers');
   if (error) throw error;
   return Number(data ?? 0);
+}
+
+/** Дуелі гравця за останні дні, нові зверху. */
+export async function listDuels(): Promise<Duel[]> {
+  if (!me) return [];
+  const { data, error } = await db()
+    .from('duels')
+    .select('*')
+    .or(`challenger.eq.${me.id},opponent.eq.${me.id}`)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  return (data ?? []) as Duel[];
+}
+
+export async function createDuel(opponent: string, game: string, stake: number) {
+  const { error } = await db().rpc('create_duel', { p_opponent: opponent, p_game: game, p_stake: Math.round(stake) });
+  if (error) throw error;
+}
+
+export async function respondDuel(id: number, accept: boolean) {
+  const { error } = await db().rpc('respond_duel', { p_id: id, p_accept: accept });
+  if (error) throw error;
+}
+
+export async function cancelDuel(id: number) {
+  const { error } = await db().rpc('cancel_duel', { p_id: id });
+  if (error) throw error;
+}
+
+export async function submitDuelScore(id: number, score: number) {
+  const { error } = await db().rpc('submit_duel_score', { p_id: id, p_score: Math.max(0, Math.round(score)) });
+  if (error) throw error;
 }

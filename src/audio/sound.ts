@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { useSyncExternalStore } from 'react';
+import { Platform } from 'react-native';
 import { MUSIC, MusicId, SFX, SfxId } from './assets';
 
 export type { MusicId, SfxId };
@@ -11,12 +12,27 @@ export interface Settings {
   vibration: boolean;
   fastSpin: boolean;
   breakReminder: boolean;
+  lite: boolean;
 }
 
 const KEY = 'freecasino:settings:v1';
 const MUSIC_VOLUME = 0.35;
 
-let settings: Settings = { music: true, sfx: true, vibration: true, fastSpin: false, breakReminder: true };
+// На айфонах (і в Telegram на айфоні) анімації на JS гальмують, тож за замовчуванням легкий режим.
+function isIOS() {
+  if (Platform.OS === 'ios') return true;
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+let settings: Settings = {
+  music: true,
+  sfx: true,
+  vibration: true,
+  fastSpin: false,
+  breakReminder: true,
+  lite: isIOS(),
+};
 const listeners = new Set<() => void>();
 
 export function getSettings() {

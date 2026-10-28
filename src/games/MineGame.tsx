@@ -71,7 +71,10 @@ function BlockView({
   );
 }
 
-export function MineGame({ game }: { game: GameInfo }) {
+// У дуелі всі грають дерев'яною киркою і віртуальною ставкою, очки = знайдене × 1000.
+export const DUEL_MINE_BET = 1000;
+
+export function MineGame({ game, duel }: { game: GameInfo; duel?: (points: number) => void }) {
   const wallet = useWallet();
   const { width } = useWindowDimensions();
   const [bet, setBet] = useState(100);
@@ -81,11 +84,21 @@ export function MineGame({ game }: { game: GameInfo }) {
   const [runBet, setRunBet] = useState(0);
   const [shakes, setShakes] = useState<Record<number, number>>({});
   const [message, setMessage] = useState({ text: 'Копай глибше: там цінніша руда', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
-  const pick = PICKAXES[wallet.state.pickaxe];
+  const pick = duel ? PICKAXES[0] : PICKAXES[wallet.state.pickaxe];
   const nextPick = PICKAXES[wallet.state.pickaxe + 1];
   const size = Math.floor((Math.min(width, 480) - 40 - (MINE_COLS - 1) * 2) / MINE_COLS);
 
+  const show = (v: number) => (duel ? `${Math.round(v)} очок` : formatCoins(v));
+
   const start = () => {
+    if (duel) {
+      setBlocks(generateMine());
+      setStrikes(STRIKES);
+      setRunValue(0);
+      setRunBet(DUEL_MINE_BET);
+      setMessage({ text: `Дуель: ${STRIKES} ударів, хто знайде більше`, tone: 'neutral' });
+      return;
+    }
     if (!wallet.bet(game.id, 'fast', bet)) {
       setMessage({ text: 'Недостатньо коштів', tone: 'lose' });
       return;
@@ -99,6 +112,11 @@ export function MineGame({ game }: { game: GameInfo }) {
 
   const finish = async (value: number) => {
     const won = Math.round(value * runBet);
+    if (duel) {
+      setBlocks(null);
+      duel(won);
+      return;
+    }
     if (won > 0) {
       wallet.win(game.id, won);
       if (winTier(won, runBet)) await celebrate({ kind: 'win', amount: won, bet: runBet });
@@ -128,7 +146,7 @@ export function MineGame({ game }: { game: GameInfo }) {
       if (found.length) {
         const best = found.sort((a, b) => blockValue(b) - blockValue(a))[0];
         setMessage({
-          text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${r.exploded ? ' (вибух!)' : ''} +${formatCoins(r.value * runBet)}`,
+          text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${r.exploded ? ' (вибух!)' : ''} +${show(r.value * runBet)}`,
           tone: 'win',
         });
         sfx('coin', 0.6);
@@ -152,7 +170,7 @@ export function MineGame({ game }: { game: GameInfo }) {
               <View style={[styles.energyFill, { width: `${(strikes / STRIKES) * 100}%` }]} />
             </View>
             <Text style={styles.infoText}>
-              Ударів: {strikes} · Знайдено: {formatCoins(runValue * runBet)}
+              Ударів: {strikes} · Знайдено: {show(runValue * runBet)}
             </Text>
           </>
         )}
@@ -175,6 +193,8 @@ export function MineGame({ game }: { game: GameInfo }) {
           </View>
           <BigButton label="ЗАБРАТИ ЗНАХІДКИ" color={colors.accent} onPress={() => finish(runValue)} />
         </View>
+      ) : duel ? (
+        <BigButton label="ПОЧАТИ ДУЕЛЬ" onPress={start} />
       ) : (
         <>
           <BetSelector value={bet} onChange={setBet} />

@@ -51,3 +51,5 @@ Google Play і App Store мають окремі правила для «соц�
 3. Authentication → Sign In / Providers → увімкни Anonymous sign-ins.
 4. Project Settings → API: скопіюй Project URL і ключ `anon public` у `src/config.ts`.
    Ключ `service_role` у застосунок не вставляй ніколи.
+
+Для дуелей з другом запусти ще `docs/supabase-duels.sql` у SQL Editor (один раз, після `docs/supabase.sql`).

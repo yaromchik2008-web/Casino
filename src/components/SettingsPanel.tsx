@@ -8,6 +8,7 @@ const ROWS: { key: keyof Settings; label: string; icon: string }[] = [
   { key: 'sfx', label: 'Звукові ефекти', icon: '🔊' },
   { key: 'vibration', label: 'Вібрація', icon: '📳' },
   { key: 'fastSpin', label: 'Швидкий оберт', icon: '⚡' },
+  { key: 'lite', label: 'Легкий режим (менше анімацій, якщо гальмує)', icon: '🪶' },
   { key: 'breakReminder', label: 'Нагадування про перерву (щогодини)', icon: '⏰' },
 ];
 
