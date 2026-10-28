@@ -100,6 +100,11 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
               const r = wallet.redeemPromo(promo);
               if (r === 'invalid') setPromoMsg({ text: 'Такого промокоду немає', ok: false });
               else if (r === 'used') setPromoMsg({ text: 'Цей промокод ти вже використав', ok: false });
+              else if (r === 'reset') {
+                setPromo('');
+                setPromoMsg({ text: 'Баланс обнулено 😈', ok: false });
+                wallet.notify('🎟️ Промокод ben: баланс обнулено');
+              }
               else {
                 sfx('cash');
                 setPromo('');

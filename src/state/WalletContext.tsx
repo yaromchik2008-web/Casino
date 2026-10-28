@@ -28,8 +28,10 @@ export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
 // Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS (за бажанням ghj усі поточні багаторазові).
-const PROMO_CODES: Record<string, number> = { sosunok: 100000, salo: 1000000, ben: 500000 };
+const PROMO_CODES: Record<string, number> = { sosunok: 100000, salo: 1000000 };
 const REUSABLE_PROMOS = ['sosunok', 'salo', 'ben'];
+// Жартівливі коди, що обнуляють баланс (за бажанням ghj).
+const RESET_PROMOS = ['ben'];
 export const CASHBACK_RATE = 0.02;
 
 export interface PlayerState {
@@ -151,7 +153,7 @@ interface WalletApi {
   buyPickaxe: (level: number) => boolean;
   claimAchievement: (id: string) => number;
   placeSportBet: (picks: SportPick[], stake: number) => boolean;
-  redeemPromo: (code: string) => number | 'used' | 'invalid';
+  redeemPromo: (code: string) => number | 'used' | 'invalid' | 'reset';
   enterTourney: (round: number) => void;
   grantItem: (id: string) => 'item' | 'cash' | 'none';
   openGame: (gameId: string) => void;
@@ -497,6 +499,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const redeemPromo = useCallback(
     (raw: string) => {
       const code = raw.trim().toLowerCase();
+      if (RESET_PROMOS.includes(code)) {
+        commit((p) => ({ ...p, balance: 0 }));
+        return 'reset' as const;
+      }
       const amount = PROMO_CODES[code];
       if (!amount) return 'invalid' as const;
       if (!REUSABLE_PROMOS.includes(code) && stateRef.current.promoUsed.includes(code)) return 'used' as const;
