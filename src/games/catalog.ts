@@ -93,7 +93,33 @@ const KARAS_ART: Record<string, ImageSourcePropType> = {
   scatter: require('../../assets/karas/scatter.png'),
 };
 
+// Машини «Автобазару» намальовані для Casino Victor (assets/cars), без логотипів і номерів.
+const CARS_ART: Record<string, ImageSourcePropType> = {
+  v0: require('../../assets/cars/vaz.png'),
+  v1: require('../../assets/cars/lanos.png'),
+  v2: require('../../assets/cars/doblo.png'),
+  v3: require('../../assets/cars/megane.png'),
+  v4: require('../../assets/cars/audi.png'),
+  v5: require('../../assets/cars/bmw.png'),
+  wild: require('../../assets/cars/police.png'),
+  scatter: require('../../assets/cars/uaz.png'),
+  cover: require('../../assets/cars/sprinter.png'),
+};
+
 export const GAMES: GameInfo[] = [
+  {
+    id: 'avtobazar',
+    music: 'classic',
+    title: 'Автобазар',
+    emoji: '🚗',
+    colors: ['#2456B8', '#0B1638'],
+    kind: 'slot',
+    categories: ['new', 'popular', 'slots'],
+    tag: 'NEW',
+    slot: video(['🟩', '⬜', '🚐', '🚙', '🟢', '🚘'], '🚓', '🛻'),
+    art: CARS_ART,
+    description: '5 барабанів з машинами: від «сімки» і Ланоса до Ікс 3. Поліція-wild замінює всіх, 3+ УАЗи дають фриспіни.',
+  },
   {
     id: 'golden-karas',
     music: 'ocean',

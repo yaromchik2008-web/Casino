@@ -54,6 +54,14 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
       action: () => onOpenGame('golden-karas'),
     },
     {
+      title: 'Нове: Автобазар',
+      text: 'Слот з машинами: від «сімки» до Ікс 3. Поліція-wild, УАЗ дає фриспіни',
+      colors: ['#2456B8', '#0B1638'] as const,
+      emoji: '🚗',
+      image: findGame('avtobazar')?.art?.cover,
+      action: () => onOpenGame('avtobazar'),
+    },
+    {
       title: 'Щоденний бонус',
       text: 'Заходь щодня і забирай до 100 ₴',
       colors: ['#F43F5E', '#7C3AED'] as const,

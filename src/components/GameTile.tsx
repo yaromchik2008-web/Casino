@@ -22,8 +22,8 @@ export function GameTile({
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ width }, pressed && styles.pressed]}>
       <LinearGradient colors={game.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.tile, { height: width * 1.2 }]}>
-        {game.art?.wild ? (
-          <Image source={game.art.wild} style={[styles.emoji, { width: width * 0.62, height: width * 0.62, borderRadius: width * 0.12 }]} />
+        {game.art?.cover ?? game.art?.wild ? (
+          <Image source={game.art.cover ?? game.art.wild} style={[styles.emoji, { width: width * 0.62, height: width * 0.62, borderRadius: width * 0.12 }]} />
         ) : (
           <Text style={[styles.emoji, { fontSize: width * 0.42 }]}>{game.emoji}</Text>
         )}
