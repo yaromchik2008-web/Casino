@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { Ctx, FONT, GameCanvas, WEB, roundRect } from '../components/canvasKit';
 import { BetSelector, BigButton, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
@@ -8,6 +9,7 @@ import { GameInfo } from './catalog';
 const ROWS = 10;
 const BUCKETS = [10, 4, 2, 1.2, 0.7, 0.4, 0.7, 1.2, 2, 4, 10]; // RTP ≈ 0.94
 const STEP_MS = 110;
+const BOARD_H = 20 + ROWS * 22 + 40;
 
 function bucketColor(m: number) {
   if (m >= 10) return '#DC2626';
@@ -31,7 +33,95 @@ export function PlinkoGame({ game }: { game: GameInfo }) {
   const gap = width / (BUCKETS.length + 1);
   const rowH = 22;
 
+  // Веб: кульки летять на канвасі, кидати можна кілька одночасно.
+  const balls = useRef<{ path: number[]; start: number }[]>([]);
+  const hits = useRef<{ bucket: number; at: number }[]>([]);
+  const [flying, setFlying] = useState(0);
+  const BALL_MS = STEP_MS * 1.6;
+
+  const dropWeb = () => {
+    if (balls.current.length >= 12) return;
+    if (!wallet.bet(game.id, 'fast', bet)) {
+      setMessage({ text: 'Недостатньо монет', tone: 'lose' });
+      return;
+    }
+    const path = Array.from({ length: ROWS }, () => (Math.random() < 0.5 ? 0 : 1));
+    const b = { path, start: performance.now() };
+    balls.current.push(b);
+    setFlying((n) => n + 1);
+    const stake = bet;
+    setTimeout(() => {
+      balls.current = balls.current.filter((x) => x !== b);
+      const pos = path.reduce<number>((a, v) => a + v, 0);
+      hits.current.push({ bucket: pos, at: performance.now() });
+      const mult = BUCKETS[pos];
+      const won = Math.floor(stake * mult);
+      wallet.win(game.id, won);
+      if (mult >= 1) haptic('win');
+      setLastBucket(pos);
+      setFlying((n) => n - 1);
+      setMessage({ text: `×${mult}: ${won >= stake ? '+' : ''}${formatCoins(won)}`, tone: mult >= 1 ? 'win' : 'lose' });
+    }, ROWS * BALL_MS);
+  };
+
+  const drawBoard = (ctx: Ctx, now: number) => {
+    const H = BOARD_H;
+    ctx.clearRect(0, 0, width, H);
+    ctx.fillStyle = '#C4B5FD';
+    for (let r = 0; r < ROWS; r++)
+      for (let i = 0; i < r + 2; i++) {
+        ctx.beginPath();
+        ctx.arc(width / 2 + (i - (r + 1) / 2) * gap, 23 + r * rowH, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    // Лунки знизу; та, куди щойно впала кулька, підстрибує.
+    const bw = gap - 3;
+    const total = BUCKETS.length * bw + (BUCKETS.length - 1) * 3;
+    const by = H - 8 - 28;
+    hits.current = hits.current.filter((h) => now - h.at < 500);
+    BUCKETS.forEach((m, i) => {
+      const hit = hits.current.find((h) => h.bucket === i);
+      const k = hit ? Math.sin(((now - hit.at) / 500) * Math.PI) : 0;
+      const x = width / 2 - total / 2 + i * (bw + 3);
+      ctx.fillStyle = bucketColor(m);
+      roundRect(ctx, x, by + k * 6, bw, 28, 6);
+      ctx.fill();
+      if (hit) {
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `800 10px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(m), x + bw / 2, by + 14 + k * 6);
+    });
+    for (const b of balls.current) {
+      const e = (now - b.start) / BALL_MS;
+      const row = Math.min(ROWS, Math.floor(e));
+      const f = Math.min(1, e - row);
+      let pos = 0;
+      for (let k = 0; k < row; k++) pos += b.path[k];
+      const x0 = width / 2 + (pos - row / 2) * gap;
+      const nextPos = row < ROWS ? pos + b.path[row] : pos;
+      const x1 = width / 2 + (nextPos - (row + 1) / 2) * gap;
+      const x = row < ROWS ? x0 + (x1 - x0) * f : x0;
+      // Кожен відскок від кілочка — маленька дуга.
+      const y = 14 + (row + f) * rowH - Math.sin(f * Math.PI) * 9;
+      ctx.fillStyle = colors.accent;
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.stroke();
+    }
+    return balls.current.length > 0 || hits.current.length > 0;
+  };
+
   const drop = () => {
+    if (WEB) return dropWeb();
     if (ball) return;
     if (!wallet.bet(game.id, 'fast', bet)) {
       setMessage({ text: 'Недостатньо монет', tone: 'lose' });
@@ -65,6 +155,11 @@ export function PlinkoGame({ game }: { game: GameInfo }) {
 
   return (
     <View style={styles.root}>
+      {WEB ? (
+        <View style={styles.board} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width - 4)}>
+          <GameCanvas width={width} height={BOARD_H} draw={drawBoard} />
+        </View>
+      ) : (
       <View style={styles.board} onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}>
         {Array.from({ length: ROWS }, (_, r) =>
           Array.from({ length: r + 2 }, (_, i) => (
@@ -90,9 +185,10 @@ export function PlinkoGame({ game }: { game: GameInfo }) {
           ))}
         </View>
       </View>
+      )}
       <ResultLine text={message.text} tone={message.tone} />
-      <BetSelector value={bet} onChange={setBet} disabled={!!ball} />
-      <BigButton label={ball ? '...' : 'КИНУТИ'} onPress={drop} disabled={!!ball} />
+      <BetSelector value={bet} onChange={setBet} disabled={WEB ? flying > 0 : !!ball} />
+      <BigButton label={!WEB && ball ? '...' : WEB && flying > 0 ? `КИНУТИ ЩЕ (${flying} летить)` : 'КИНУТИ'} onPress={drop} disabled={!WEB && !!ball} />
     </View>
   );
 }

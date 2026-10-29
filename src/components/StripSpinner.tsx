@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { Animated, Easing, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../theme';
+import { Ctx, FONT, GameCanvas, WEB, easeOutCubic, roundRect } from './canvasKit';
 
 export interface StripItem {
   label: string;
@@ -24,12 +25,27 @@ export const StripSpinner = forwardRef<StripSpinnerHandle, { items: StripItem[] 
   const offset = useRef(new Animated.Value(0)).current;
 
   const center = (pos: number) => -(pos * ITEM_W - width / 2 + ITEM_W / 2);
+  // Веб: стрічка малюється на канвасі, рух рахується в draw без React-рендерів.
+  const anim = useRef({ strip: [] as number[], from: 0, to: 0, start: 0, ms: 0, done: null as null | (() => void) });
+  const wake = useRef<(() => void) | null>(null);
 
   useImperativeHandle(ref, () => ({
     spin(targetIndex, onDone) {
       const next = Array.from({ length: STRIP_LEN }, () => Math.floor(Math.random() * items.length));
       next[TARGET_POS] = targetIndex;
       next[4] = strip[TARGET_POS] ?? next[4];
+      if (WEB) {
+        anim.current = {
+          strip: next,
+          from: center(4),
+          to: center(TARGET_POS) + (Math.random() - 0.5) * ITEM_W * 0.6,
+          start: performance.now(),
+          ms: 3200,
+          done: onDone,
+        };
+        wake.current?.();
+        return;
+      }
       setStrip(next);
       offset.setValue(center(4));
       Animated.timing(offset, {
@@ -45,7 +61,46 @@ export const StripSpinner = forwardRef<StripSpinnerHandle, { items: StripItem[] 
     const w = e.nativeEvent.layout.width;
     setWidth(w);
     offset.setValue(-(4 * ITEM_W - w / 2 + ITEM_W / 2));
+    if (WEB && !anim.current.ms) anim.current = { ...anim.current, from: -(4 * ITEM_W - w / 2 + ITEM_W / 2), to: -(4 * ITEM_W - w / 2 + ITEM_W / 2) };
   };
+
+  if (WEB) {
+    if (!anim.current.strip.length) anim.current = { strip, from: center(4), to: center(4), start: 0, ms: 0, done: null };
+    const draw = (ctx: Ctx, now: number) => {
+      const a = anim.current;
+      const t = a.ms ? (now - a.start) / a.ms : 1;
+      const x0 = a.from + (a.to - a.from) * easeOutCubic(t);
+      const h = 90;
+      ctx.clearRect(0, 0, width, h);
+      const first = Math.max(0, Math.floor(-x0 / ITEM_W) - 1);
+      const last = Math.min(a.strip.length - 1, Math.ceil((width - x0) / ITEM_W));
+      for (let i = first; i <= last; i++) {
+        const it = items[a.strip[i]];
+        const x = x0 + i * ITEM_W + 2;
+        ctx.fillStyle = it.color;
+        roundRect(ctx, x, 7, ITEM_W - 4, 76, 10);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `900 18px ${FONT}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(it.label, x + (ITEM_W - 4) / 2, 45, ITEM_W - 10);
+      }
+      if (t >= 1 && a.done) {
+        const d = a.done;
+        a.done = null;
+        setTimeout(d, 0);
+      }
+      return t < 1;
+    };
+    return (
+      <View style={styles.frame} onLayout={onLayout}>
+        <GameCanvas width={width} height={90} draw={draw} onKick={(f) => (wake.current = f)} />
+        <View pointerEvents="none" style={styles.marker} />
+        <View pointerEvents="none" style={styles.markerTop} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.frame} onLayout={onLayout}>

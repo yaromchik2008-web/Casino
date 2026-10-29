@@ -104,12 +104,15 @@ export function CanvasReels(props: Props) {
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return;
-    const dpr = Math.min(2, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
+    // Повна щільність екрана (на айфоні 3×), інакше картинки символів виходять розмитими.
+    const dpr = Math.min(3, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
     cv.width = Math.round(W * dpr);
     cv.height = Math.round(H * dpr);
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     let last = -1;
     let running = false;
     let waiting = false;
@@ -123,7 +126,7 @@ export function CanvasReels(props: Props) {
         if (im) ctx.drawImage(im, x + 3, y + 3, cell - 6, cell - 6);
         else waiting = true; // картинка ще вантажиться: перемалюємо, коли буде
       } else {
-        const e = emojiOf(sym.emoji, Math.round(q.size * 0.55));
+        const e = emojiOf(sym.emoji, Math.round(q.size * 0.55 * dpr));
         const d = cell * 0.78;
         ctx.drawImage(e, x + (cell - d) / 2, y + (cell - d) / 2, d, d);
       }
