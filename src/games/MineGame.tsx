@@ -178,8 +178,12 @@ export function MineGame({
   const pos = useRef(new Animated.ValueXY({ x: 0, y: -100 })).current;
   const rot = useRef(new Animated.Value(0)).current;
   const play = useRef<{ raf: number; skip: boolean; alive: boolean }>({ raf: 0, skip: false, alive: true });
-  // Уся шахта має влазити в екран, щоб кирку було видно до самого дна.
-  const size = Math.max(26, Math.min(Math.floor((Math.min(width, 480) - 32) / MINE_COLS), Math.floor((height - 420) / MINE_ROWS)));
+  // Шахта на всю ширину; камера їде за киркою вниз, тож небо зникає, а дна не видно до кінця.
+  const size = Math.floor((Math.min(width, 520) - 32) / MINE_COLS);
+  const skyH = size * 2;
+  const contentH = skyH + size * MINE_ROWS;
+  const viewH = Math.min(contentH, Math.max(320, height - 300));
+  const cam = useRef(new Animated.Value(0)).current;
   const pick = PICK_TIERS[tier];
 
   useEffect(
@@ -237,6 +241,8 @@ export function MineGame({
     let cur = blocks;
     let value = 0;
     let next = 0;
+    let camY = 0;
+    cam.setValue(0);
     const total = r.frames.length / 3;
     const t0 = Date.now();
     play.current.skip = false;
@@ -245,6 +251,10 @@ export function MineGame({
       const f = play.current.skip ? total - 1 : Math.min(total - 1, Math.floor(((Date.now() - t0) / 1000) * FPS));
       pos.setValue({ x: r.frames[f * 3] * size - size / 2, y: r.frames[f * 3 + 1] * size - size / 2 });
       rot.setValue(r.frames[f * 3 + 2]);
+      // Камера плавно тримає кирку у верхній чверті вікна, тож небо швидко зникає.
+      const target = Math.max(0, Math.min(contentH - viewH, skyH + r.frames[f * 3 + 1] * size - viewH * 0.22));
+      camY = play.current.skip ? target : camY + (target - camY) * 0.12;
+      cam.setValue(-camY);
       let changed = false;
       while (next < r.hits.length && r.hits[next].frame <= f) {
         const h = r.hits[next++];
@@ -314,7 +324,9 @@ export function MineGame({
       {phase === 'roll' && <PickRoulette tier={tier} onDone={run} />}
       {blocks && phase === 'run' ? (
         <View style={styles.mine}>
-          <View style={[styles.sky, { width: size * MINE_COLS, height: size * 1.4 }]}>
+          <View style={[styles.window, { width: size * MINE_COLS, height: viewH }]}>
+          <Animated.View style={{ transform: [{ translateY: cam }] }}>
+          <View style={[styles.sky, { width: size * MINE_COLS, height: skyH }]}>
             {STARS.map((st, k) => (
               <View key={k} style={[styles.star, { left: `${st[0]}%`, top: `${st[1]}%`, opacity: st[2] }]} />
             ))}
@@ -336,6 +348,8 @@ export function MineGame({
                 style={{ width: size * 0.8, height: size * 0.8, transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}
               />
             </Animated.View>
+          </View>
+          </Animated.View>
           </View>
           <View style={styles.btnRow}>
             <BigButton label="⏩ ПРОПУСТИТИ" color={colors.blue} onPress={() => (play.current.skip = true)} style={styles.half} />
@@ -384,9 +398,10 @@ const styles = StyleSheet.create({
   energy: { width: '100%', height: 10, borderRadius: 5, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   energyFill: { height: '100%', backgroundColor: colors.green },
   mine: { gap: 0, alignItems: 'center' },
+  window: { overflow: 'hidden', borderRadius: 12, alignSelf: 'center', backgroundColor: '#140F0B' },
   grass: { height: 10, alignSelf: 'stretch', backgroundColor: '#4CAF50', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' },
-  sky: { height: 70, alignSelf: 'center', backgroundColor: '#1E2350', borderTopLeftRadius: 12, borderTopRightRadius: 12, overflow: 'hidden' },
+  sky: { height: 70, alignSelf: 'center', backgroundColor: '#1E2350', overflow: 'hidden' },
   star: { position: 'absolute', width: 3, height: 3, backgroundColor: '#FFFFFF' },
   moon: { position: 'absolute', right: 18, top: 12, width: 22, height: 22, backgroundColor: '#F4F1C9' },
   caveShade: { backgroundColor: 'rgba(12,8,4,0.72)' },
