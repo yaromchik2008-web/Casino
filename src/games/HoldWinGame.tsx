@@ -69,6 +69,7 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
     spinGrid(config).map((col) => col.map((sym) => ({ sym, coin: null }))),
   );
   const [spinning, setSpinning] = useState<boolean[]>(Array(5).fill(false));
+  const [tease, setTease] = useState<boolean[]>(Array(5).fill(false));
   const [highlight, setHighlight] = useState<boolean[][]>([]);
   const [bonus, setBonus] = useState<Bonus | null>(null);
   const [waitTap, setWaitTap] = useState(false);
@@ -168,12 +169,19 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
     setMessage({ text: 'Крутимо...', tone: 'neutral' });
     const base = fast ? 350 : 700;
     const step = fast ? 130 : 260;
+    // Інтрига: якщо вже 3+ монети і ще можна дібрати до бонусу, решта барабанів світиться й крутиться довше.
+    let got = 0;
     for (let i = 0; i < 5; i++) {
-      await sleep(i === 0 ? base : step);
+      const hot = got >= 3 && got + (5 - i) * BASE_ROWS >= TRIGGER_COINS;
+      if (hot) setTease((t) => t.map((_, idx) => idx >= i));
+      await sleep((i === 0 ? base : step) + (hot ? 750 : 0));
       if (!alive.current) return;
       setSpinning((prev) => prev.map((v, idx) => (idx === i ? false : v)));
+      setTease((t) => t.map((v, idx) => (idx === i ? false : v)));
       sfx(next[i].some((c) => c.coin) ? 'lock' : 'stop', 0.5);
+      got += next[i].slice(0, BASE_ROWS).filter((c) => c.coin).length;
     }
+    setTease(Array(5).fill(false));
     const lines = paylines(config);
     const marks = Array.from({ length: 5 }, () => Array(BASE_ROWS).fill(false));
     for (const w of outcome.lineWins) for (let reel = 0; reel < w.count; reel++) marks[reel][lines[w.line][reel]] = true;
@@ -264,8 +272,8 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
       <View style={[styles.machine, { borderColor: game.colors[0] }]}>
         <View style={styles.reels}>
           {cells.map((column, i) => (
+            <View key={i} style={[styles.reelWrap, tease[i] && styles.reelTease]}>
             <Reel
-              key={i}
               items={column}
               spinning={spinning[i]}
               size={size}
@@ -280,6 +288,7 @@ export function HoldWinGame({ game }: { game: GameInfo }) {
                 )
               }
             />
+            </View>
           ))}
         </View>
       </View>
@@ -322,6 +331,8 @@ const styles = StyleSheet.create({
   jpValue: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
   machine: { padding: 10, borderRadius: 20, borderWidth: 4, backgroundColor: '#12102E', alignItems: 'center', gap: 6 },
   reels: { flexDirection: 'row', gap: 6 },
+  reelWrap: { borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
+  reelTease: { borderColor: '#FFD54A', backgroundColor: 'rgba(255,213,74,0.3)', shadowColor: '#FFD54A', shadowOpacity: 0.9, shadowRadius: 12 },
   coin: { borderRadius: 999, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#FDE68A' },
   coinLabel: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
   coinValue: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },

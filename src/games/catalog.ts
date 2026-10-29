@@ -63,7 +63,7 @@ function video(emojis: string[], wild: string, scatter: string, payScale?: numbe
   return { reels: 5, symbols: videoSymbols(emojis, wild, scatter, payScale), wild: 'wild', scatter: 'scatter' };
 }
 
-// Виплати «Ковбасного раю»: 10 фриспінів замість 8, RTP ≈ 0.88 з ретригером (simKov.ts).
+// Виплати «Ковбасного раю»: 5 фриспінів ×2, RTP ≈ 0.89 з ретригером (simF.ts).
 const KOVBASA_PAY = 0.71;
 
 function reweight(cfg: SlotConfig, weights: number[]): SlotConfig {
@@ -74,7 +74,7 @@ function reweight(cfg: SlotConfig, weights: number[]): SlotConfig {
 function holdwin(emojis: string[], wild: string): SlotConfig {
   const symbols = videoSymbols(emojis, wild, '', 0.95)
     .filter((x) => x.id !== 'scatter')
-    .map((x) => ({ ...x, pays: x.pays.map((p) => Math.round(p * 0.5 * 10) / 10) }));
+    .map((x) => ({ ...x, pays: x.pays.map((p) => Math.round(p * 0.3 * 10) / 10) }));
   return { reels: 5, symbols, wild: 'wild' };
 }
 
@@ -138,9 +138,9 @@ export const GAMES: GameInfo[] = [
     kind: 'slot',
     categories: ['new', 'popular', 'slots'],
     tag: 'NEW',
-    slot: { ...video(['🌭', '🥓', '🍖', '⭕', '🥢', '🥨'], '🐷', '🍳', KOVBASA_PAY), freeSpins: 10 },
+    slot: { ...video(['🌭', '🥓', '🍖', '⭕', '🥢', '🥨'], '🐷', '🍳', KOVBASA_PAY), freeSpins: 5, feature: 'double' },
     art: KOVBASA_ART,
-    description: 'Від сосиски до краківської. Порося-wild замінює всіх, 3+ сковорідки «БОНУС» дають 10 фриспінів, а бонуска в бонусці дає ще 10.',
+    description: 'Від сосиски до краківської. Порося-wild замінює всіх, 3+ сковорідки «БОНУС» дають 5 фриспінів «Подвійна порція»: усі виграші ×2. Бонуска в бонусці дає ще 5.',
   },
   {
     id: 'avtobazar',
@@ -152,9 +152,9 @@ export const GAMES: GameInfo[] = [
     categories: ['new', 'popular', 'slots'],
     tag: 'NEW',
     // Дешеві машини випадають частіше: виграш приблизно в кожному другому оберті (55%), RTP ≈ 0.9 (simA.ts).
-    slot: reweight(video(['🟩', '⬜', '🚐', '🚗', '🟢', '🚘'], '🚓', '🛻', 0.49), [40, 30, 16, 8, 5, 3]),
+    slot: { ...reweight(video(['🟩', '⬜', '🚐', '🚗', '🟢', '🚘'], '🚓', '🛻', 0.49), [40, 30, 16, 8, 5, 3]), freeSpins: 5, feature: 'mystery' },
     art: CARS_ART,
-    description: '5 барабанів з машинами: від «сімки» і Ланоса до Ікс 3. Поліція-wild замінює всіх, 3+ УАЗи дають фриспіни.',
+    description: '5 барабанів з машинами: від «сімки» і Ланоса до Ікс 3. Поліція-wild замінює всіх, 3+ УАЗи дають фриспіни «Таємний символ»: одна з дорогих машин на весь бонус стає wild.',
   },
   {
     id: 'golden-karas',
@@ -237,8 +237,8 @@ export const GAMES: GameInfo[] = [
     kind: 'slot',
     categories: ['special', 'slots', 'new'],
     tag: 'NEW',
-    slot: video(['☄️', '🛰️', '🪐', '👽', '🚀', '🌌'], '⭐', '🛸'),
-    description: 'Політ серед зірок. ⭐ замінює символи, 3+ 🛸 дають фриспіни.',
+    slot: { ...video(['☄️', '🛰️', '🪐', '👽', '🚀', '🌌'], '⭐', '🛸'), freeSpins: 5, feature: 'expand' },
+    description: 'Політ серед зірок. ⭐ замінює символи, 3+ 🛸 дають фриспіни з розширними ⭐: wild займає весь барабан.',
   },
   {
     id: 'ocean',
@@ -248,8 +248,8 @@ export const GAMES: GameInfo[] = [
     colors: ['#0EA5E9', '#0C4A6E'],
     kind: 'slot',
     categories: ['special', 'slots'],
-    slot: video(['🐚', '🐠', '🦀', '🐙', '🦈', '🧜'], '🔱', '🫧'),
-    description: 'Підводні скарби. 🔱 замінює символи, 3+ 🫧 дають фриспіни.',
+    slot: { ...video(['🐚', '🐠', '🦀', '🐙', '🦈', '🧜'], '🔱', '🫧'), freeSpins: 4, feature: 'sticky' },
+    description: 'Підводні скарби. 🔱 замінює символи, 3+ 🫧 дають фриспіни з липкими 🔱: wild лишаються до кінця бонусу.',
   },
   {
     id: 'candy',
@@ -283,8 +283,8 @@ export const GAMES: GameInfo[] = [
     colors: ['#B45309', '#3F1D0B'],
     kind: 'slot',
     categories: ['special', 'slots'],
-    slot: video(['🌵', '🐎', '🥾', '🎩', '💰', '🤠'], '⭐', '🗺️'),
-    description: 'Шериф шукає скарби. ⭐ замінює символи, 3+ 🗺️ дають фриспіни.',
+    slot: { ...video(['🌵', '🐎', '🥾', '🎩', '💰', '🤠'], '⭐', '🗺️'), freeSpins: 5, feature: 'ladder' },
+    description: 'Шериф шукає скарби. ⭐ замінює символи, 3+ 🗺️ дають фриспіни, де кожен виграш додає +1 до множника.',
   },
   {
     id: 'pirates',
@@ -295,8 +295,8 @@ export const GAMES: GameInfo[] = [
     kind: 'slot',
     categories: ['special', 'slots', 'new'],
     tag: 'NEW',
-    slot: video(['⚓', '🦜', '🧭', '🗡️', '💰', '🏴‍☠️'], '☠️', '🗺️'),
-    description: 'На абордаж! ☠️ замінює символи, 3+ 🗺️ дають фриспіни.',
+    slot: { ...video(['⚓', '🦜', '🧭', '🗡️', '💰', '🏴‍☠️'], '☠️', '🗺️'), freeSpins: 4, feature: 'randomWilds' },
+    description: 'На абордаж! ☠️ замінює символи, 3+ 🗺️ дають фриспіни «Скарби на мапі»: на кожному оберті зʼявляються нові ☠️.',
   },
   {
     id: 'dragon',
@@ -306,8 +306,8 @@ export const GAMES: GameInfo[] = [
     colors: ['#DC2626', '#450A0A'],
     kind: 'slot',
     categories: ['special', 'slots', 'popular'],
-    slot: video(['🏮', '🧧', '🪭', '🏯', '🔥', '🐉'], '🪙', '🥮'),
-    description: 'Вогняні виграші. 🪙 замінює символи, 3+ 🥮 дають фриспіни.',
+    slot: { ...video(['🏮', '🧧', '🪭', '🏯', '🔥', '🐉'], '🪙', '🥮'), freeSpins: 5, feature: 'wildReel' },
+    description: 'Вогняні виграші. 🪙 замінює символи, 3+ 🥮 дають фриспіни «Вогняний барабан»: дракон перетворює цілий барабан на wild.',
   },
   {
     id: 'forest',
@@ -317,8 +317,8 @@ export const GAMES: GameInfo[] = [
     colors: ['#16A34A', '#052E16'],
     kind: 'slot',
     categories: ['special', 'slots'],
-    slot: video(['🌰', '🍄', '🦔', '🦉', '🦊', '🧚'], '🌳', '🌙'),
-    description: 'Магія лісу. 🌳 замінює символи, 3+ 🌙 дають фриспіни.',
+    slot: { ...video(['🌰', '🍄', '🦔', '🦉', '🦊', '🧚'], '🌳', '🌙'), freeSpins: 4, feature: 'randomMult' },
+    description: 'Магія лісу. 🌳 замінює символи, 3+ 🌙 дають фриспіни з чарівним множником ×1…×5 на кожному оберті.',
   },
   {
     id: 'vikings',
@@ -328,8 +328,8 @@ export const GAMES: GameInfo[] = [
     colors: ['#64748B', '#1E293B'],
     kind: 'slot',
     categories: ['special', 'slots'],
-    slot: video(['🪓', '🛡️', '🐺', '⛵', '🍺', '👑'], '⚡', '🔮'),
-    description: 'Похід за золотом. ⚡ замінює символи, 3+ 🔮 дають фриспіни.',
+    slot: { ...video(['🪓', '🛡️', '🐺', '⛵', '🍺', '👑'], '⚡', '🔮'), freeSpins: 4, feature: 'thunder' },
+    description: 'Похід за золотом. ⚡ замінює символи, 3+ 🔮 дають фриспіни «Молот Тора»: блискавка робить 3–5 однакових дорогих символів.',
   },
   {
     id: 'shakhta',

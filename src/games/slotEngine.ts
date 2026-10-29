@@ -13,6 +13,123 @@ export interface SlotConfig {
   jackpotSymbol?: string;
   /** Скільки фриспінів дають 3+ scatter (типово FREE_SPINS_AWARD). */
   freeSpins?: number;
+  /** Особливість фриспінів цього слота: у кожного своя. */
+  feature?: FsFeature;
+}
+
+/**
+ * Особливості фриспінів:
+ * expand: wild розростається на весь барабан; sticky: wild залишаються до кінця бонусу;
+ * ladder: кожен виграшний фриспін +1 до множника; randomWilds: 1–3 випадкові клітинки стають wild;
+ * wildReel: інколи цілий барабан стає wild; randomMult: випадковий множник оберту;
+ * double: усі виграші ×2; mystery: на весь бонус один звичайний символ стає wild;
+ * thunder: блискавка перетворює 3–5 клітинок на один дорогий символ.
+ */
+export type FsFeature = 'expand' | 'sticky' | 'ladder' | 'randomWilds' | 'wildReel' | 'randomMult' | 'double' | 'mystery' | 'thunder';
+
+export const FEATURE_INFO: Record<FsFeature, { title: string; text: string; emoji: string }> = {
+  expand: { title: 'Розширні wild', text: 'кожен wild розростається на весь барабан', emoji: '↕️' },
+  sticky: { title: 'Липкі wild', text: 'кожен wild залишається на місці до кінця бонусу', emoji: '📌' },
+  ladder: { title: 'Множник, що росте', text: 'кожен виграшний фриспін додає +1 до множника', emoji: '📈' },
+  randomWilds: { title: 'Скарби на мапі', text: 'на кожному фриспіні 1–2 клітинки стають wild', emoji: '✨' },
+  wildReel: { title: 'Вогняний барабан', text: 'на фриспіні цілий барабан може стати wild', emoji: '🔥' },
+  randomMult: { title: 'Чарівний множник', text: 'кожен фриспін отримує множник ×1…×5', emoji: '🪄' },
+  double: { title: 'Подвійна порція', text: 'усі виграші у фриспінах ×2', emoji: '✖️' },
+  mystery: { title: 'Таємний символ', text: 'на весь бонус один символ стає wild', emoji: '❓' },
+  thunder: { title: 'Молот Тора', text: 'блискавка перетворює 3–5 клітинок на один дорогий символ', emoji: '⚡' },
+};
+
+/** Стан бонусу між фриспінами. */
+export interface FsState {
+  sticky: boolean[][];
+  ladder: number;
+  mystery?: string;
+}
+
+export function newFsState(config: SlotConfig, rand: () => number = Math.random): FsState {
+  const plain = config.symbols.filter((x) => x.id !== config.wild && x.id !== config.scatter);
+  return {
+    sticky: Array.from({ length: config.reels }, () => Array(ROWS).fill(false)),
+    ladder: 1,
+    // Таємний символ береться з трьох найрідкісніших, інакше бонус занадто щедрий.
+    mystery: config.feature === 'mystery' ? plain.slice(-3)[Math.floor(rand() * 3)].id : undefined,
+  };
+}
+
+export interface FsSpin {
+  grid: Grid;
+  /** Клітинки, які змінила особливість (для підсвітки). */
+  changed: boolean[][];
+  /** Множник виграшу оберту. */
+  mult: number;
+}
+
+/** Фриспін з особливістю слота. Після оцінки виграшу викликати finishFeature. */
+export function featureSpin(config: SlotConfig, st: FsState, rand: () => number = Math.random): FsSpin {
+  const grid = spinGrid(config, rand, true);
+  const changed = Array.from({ length: config.reels }, () => Array(ROWS).fill(false));
+  const wild = config.symbols.find((x) => x.id === config.wild);
+  let mult = 1;
+  const setWild = (r: number, row: number) => {
+    if (!wild || grid[r][row].id === config.scatter || grid[r][row].id === wild.id) return;
+    grid[r][row] = wild;
+    changed[r][row] = true;
+  };
+  switch (config.feature) {
+    case 'expand':
+      for (let r = 0; r < config.reels; r++) if (grid[r].some((x) => x.id === config.wild)) for (let row = 0; row < ROWS; row++) setWild(r, row);
+      break;
+    case 'sticky':
+      for (let r = 0; r < config.reels; r++) for (let row = 0; row < ROWS; row++) if (st.sticky[r][row]) setWild(r, row);
+      break;
+    case 'randomWilds': {
+      const n = 1 + Math.floor(rand() * 2);
+      for (let k = 0; k < n; k++) setWild(Math.floor(rand() * config.reels), Math.floor(rand() * ROWS));
+      break;
+    }
+    case 'wildReel':
+      if (rand() < 0.4) {
+        const r = 1 + Math.floor(rand() * (config.reels - 2));
+        for (let row = 0; row < ROWS; row++) setWild(r, row);
+      }
+      break;
+    case 'randomMult': {
+      const vals = [1, 1, 2, 2, 3, 5];
+      mult = vals[Math.floor(rand() * vals.length)];
+      break;
+    }
+    case 'double':
+      mult = 2;
+      break;
+    case 'ladder':
+      mult = st.ladder;
+      break;
+    case 'thunder': {
+      const plain = config.symbols.filter((x) => x.id !== config.wild && x.id !== config.scatter);
+      const top = plain.slice(-3);
+      const sym = top[Math.floor(rand() * top.length)];
+      const n = 3 + Math.floor(rand() * 3);
+      for (let k = 0; k < n; k++) {
+        const r = Math.floor(rand() * config.reels);
+        const row = Math.floor(rand() * ROWS);
+        if (grid[r][row].id === config.scatter || grid[r][row].id === config.wild) continue;
+        grid[r][row] = sym;
+        changed[r][row] = true;
+      }
+      break;
+    }
+    case 'mystery':
+      for (let r = 0; r < config.reels; r++) for (let row = 0; row < ROWS; row++) if (grid[r][row].id === st.mystery) setWild(r, row);
+      break;
+  }
+  return { grid, changed, mult };
+}
+
+/** Оновлює стан бонусу після оберту: липкі wild запам'ятовуються, драбина росте після виграшу. */
+export function finishFeature(config: SlotConfig, st: FsState, spin: FsSpin, won: boolean) {
+  if (config.feature === 'sticky')
+    spin.grid.forEach((col, r) => col.forEach((x, row) => x.id === config.wild && (st.sticky[r][row] = true)));
+  if (config.feature === 'ladder' && won) st.ladder = Math.min(10, st.ladder + 1);
 }
 
 export const ROWS = 3;

@@ -4,7 +4,7 @@ export const HW_COLS = 5;
 export const HW_ROWS = 5; // повне поле бонуса; основна гра бачить нижні 3 ряди
 export const BASE_ROWS = 3;
 export const TRIGGER_COINS = 6;
-export const BASE_COIN_CHANCE = 0.125; // RTP ≈ 0.96 при виплатах ×0.5 (симуляція: лінії 0.26 + бонус 0.71, бонус ≈ 1 на 142 оберти)
+export const BASE_COIN_CHANCE = 0.13; // бонус ≈ 1 на 118 обертів; з виплатами ×0.3 RTP ≈ 0.98 (simH.ts, джекпот Гранд дає великий розкид)
 export const RESPINS = 3;
 export const UNLOCK_AT = [5, 10]; // нових монет, щоб відкрити 4-й і 5-й ряд
 

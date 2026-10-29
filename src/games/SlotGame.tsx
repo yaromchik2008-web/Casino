@@ -11,7 +11,7 @@ import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 import { KarasBonus } from './KarasBonus';
 import { SPRINTER_ID } from './karasWheel';
-import { Grid, ROWS, SlotConfig, evaluateGrid, paylines, randomSymbol, spinGrid } from './slotEngine';
+import { FEATURE_INFO, FsState, Grid, ROWS, SlotConfig, evaluateGrid, featureSpin, finishFeature, newFsState, paylines, randomSymbol, spinGrid } from './slotEngine';
 
 const REEL_BASE_MS = 700;
 const KARAS_FREE_SPINS = 5;
@@ -46,6 +46,10 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const stepMs = REEL_STEP_MS * slow;
   const busy = spinning.some(Boolean);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Особливість фриспінів цього слота і її стан (липкі wild, множник, що росте…).
+  const feature = wheelBonus ? undefined : config.feature;
+  const fsState = useRef<FsState>(newFsState(config));
+  const [fsMult, setFsMult] = useState(1);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
@@ -61,8 +65,15 @@ export function SlotGame({ game }: { game: GameInfo }) {
     }
     if (free) setFreeSpins((n) => n - 1);
     const karasFree = free && wheelBonus;
-    const result = spinGrid(config, Math.random, free);
-    const outcome = evaluateGrid(config, result, bet);
+    const fsSpin = free && feature ? featureSpin(config, fsState.current) : null;
+    const result = fsSpin ? fsSpin.grid : spinGrid(config, Math.random, free);
+    const raw = evaluateGrid(config, result, bet);
+    const mult = fsSpin?.mult ?? 1;
+    const outcome = { ...raw, win: Math.round(raw.win * mult) };
+    if (fsSpin) {
+      finishFeature(config, fsState.current, fsSpin, raw.win > 0);
+      setFsMult(feature === 'ladder' ? fsState.current.ladder : mult);
+    }
     // Ретригер: бонуска в бонусці додає ще один бонус (у фриспінах scatter випадає рідше).
     const retrigger = free && outcome.freeSpins > 0;
     const lastFree = karasFree && freeSpins <= 1 && !retrigger;
@@ -78,8 +89,12 @@ export function SlotGame({ game }: { game: GameInfo }) {
     const stopAt: number[] = [];
     let seen = 0;
     let extra = 0;
+    // У класичних 3-барабанних: два дорогі однакові символи на центральній лінії інтригують третій барабан.
+    const plain = config.symbols;
+    const rich = (id: string) => plain.findIndex((x) => x.id === id) >= plain.length - 4;
+    const classicTease = config.reels === 3 && result[0][1].id === result[1][1].id && rich(result[0][1].id);
     for (let i = 0; i < config.reels; i++) {
-      teased.push(!!config.scatter && seen >= 2);
+      teased.push((!!config.scatter && seen >= 2) || (classicTease && i === 2));
       if (teased[i]) extra += TEASE_MS;
       stopAt.push(base + i * stepMs + extra);
       seen += result[i].filter((s) => s.id === config.scatter).length;
@@ -89,7 +104,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
       timers.current.push(
         setTimeout(() => {
           setSpinning((prev) => prev.map((v, idx) => (idx === i ? false : v)));
-          sfx(teased[i] && result[i].some((s) => s.id === config.scatter) ? 'lock' : 'stop', 0.5);
+          sfx(teased[i] && (result[i].some((s) => s.id === config.scatter) || (classicTease && result[i][1].id === result[0][1].id)) ? 'lock' : 'stop', 0.5);
         }, stopAt[i]),
       );
     }
@@ -111,6 +126,8 @@ export function SlotGame({ game }: { game: GameInfo }) {
         if (outcome.jackpot) {
           for (let reel = 0; reel < config.reels; reel++) marks[reel][1] = true;
         }
+        // Клітинки, які змінила особливість бонусу, теж світяться.
+        fsSpin?.changed.forEach((col, reel) => col.forEach((c, row) => c && (marks[reel][row] = true)));
         setHighlight(marks);
         setWinLines(outcome.lineWins.map((w) => ({ rows: lines[w.line], count: w.count })));
 
@@ -127,7 +144,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
           sfx('win');
         } else if (outcome.win > 0) {
           wallet.win(game.id, outcome.win);
-          parts.push(`+${formatCoins(outcome.win)}`);
+          parts.push(mult > 1 ? `×${mult}! +${formatCoins(outcome.win)}` : `+${formatCoins(outcome.win)}`);
           setLastWin((w) => ({ amount: outcome.win, key: w.key + 1 }));
           if (winTier(outcome.win, bet)) {
             setAuto(0);
@@ -152,11 +169,22 @@ export function SlotGame({ game }: { game: GameInfo }) {
           parts.push(`${KARAS_FREE_SPINS} фриспінів!`);
           celebrate({ kind: 'intro', emoji: '🐟', title: `${KARAS_FREE_SPINS} ФРИСПІНІВ!`, subtitle: 'Увесь виграш піде в колесо фортуни і помножиться' });
         } else if (outcome.freeSpins > 0 && !wheelBonus && !free) {
+          fsState.current = newFsState(config);
+          setFsMult(1);
           setFreeSpins((n) => n + outcome.freeSpins);
           setAuto(0);
           wallet.track('bonuses');
           parts.push(`${outcome.freeSpins} фриспінів!`);
-          celebrate({ kind: 'intro', emoji: '🎁', title: 'ФРИСПІНИ!', subtitle: `${outcome.freeSpins} безкоштовних обертів` });
+          const info = feature ? FEATURE_INFO[feature] : null;
+          const mystery = feature === 'mystery' ? config.symbols.find((x) => x.id === fsState.current.mystery)?.emoji : '';
+          celebrate({
+            kind: 'intro',
+            emoji: info?.emoji ?? '🎁',
+            title: info ? info.title.toUpperCase() : 'ФРИСПІНИ!',
+            subtitle: info
+              ? `${outcome.freeSpins} фриспінів: ${info.text}${mystery ? ` (${mystery})` : ''}`
+              : `${outcome.freeSpins} безкоштовних обертів`,
+          });
         }
         if (parts.length) {
           haptic('win');
@@ -248,6 +276,9 @@ export function SlotGame({ game }: { game: GameInfo }) {
           <Text style={styles.free}>
             Фриспіни: {freeSpins}
             {wheelBonus ? ` · Банк: ${formatCoins(bank)}` : ''}
+            {feature ? ` · ${FEATURE_INFO[feature].emoji} ${FEATURE_INFO[feature].title}` : ''}
+            {feature === 'mystery' ? ` ${config.symbols.find((x) => x.id === fsState.current.mystery)?.emoji ?? ''}` : ''}
+            {(feature === 'ladder' || feature === 'randomMult' || feature === 'double') && fsMult > 1 ? ` · ×${fsMult}` : ''}
           </Text>
         )}
       </View>
@@ -280,7 +311,7 @@ function Paytable({ config, art, wheel }: { config: SlotConfig; art?: GameInfo['
             {s.id === config.scatter
               ? wheel
                 ? '3/4/5 будь-де: ×5/×20/×100 ставки + 5 фриспінів, виграш яких Колесо фортуни множить до ×100 (або Mercedes Sprinter 3.0). Бонуска у фриспінах дає ще +5'
-                : `3/4/5 будь-де: ×5/×20/×100 ставки + ${config.freeSpins ?? 8} фриспінів. Бонуска в бонусці дає ще (у фриспінах трохи рідше)`
+                : `3/4/5 будь-де: ×5/×20/×100 ставки + ${config.freeSpins ?? 8} фриспінів${config.feature ? ` з особливістю «${FEATURE_INFO[config.feature].title}»: ${FEATURE_INFO[config.feature].text}` : ''}. Бонуска в бонусці дає ще (у фриспінах трохи рідше)`
               : s.id === config.wild
                 ? `Wild: замінює символи · ${s.pays.map((p) => `×${p}`).join(' / ')}`
                 : s.id === config.jackpotSymbol
