@@ -103,6 +103,13 @@ const ERRORS: Record<string, string> = {
   already_referred: 'Ти вже отримав бонус за запрошення',
   referral_too_late: 'Код друга можна ввести лише в перші 7 днів гри',
   referral_limit: 'Цей друг уже запросив максимум гравців',
+  durak_busy: 'У тебе вже є відкритий стіл або гра в дурака',
+  durak_taken: 'За цей стіл уже сіли',
+  durak_closed: 'Ця гра вже закінчилась',
+  durak_stale: 'Стан гри оновився, спробуй ще раз',
+  durak_turn: 'Зараз хід суперника',
+  durak_wait: 'Суперник ще має час на хід',
+  durak_bad: 'Сервер не прийняв хід',
 };
 
 export function friendlyError(e: unknown): string {
@@ -113,6 +120,8 @@ export function friendlyError(e: unknown): string {
     return 'На сервері ще не запущено SQL з docs/supabase-v5.sql';
   if (/tourney|leaderboard|settle|rank/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
     return 'На сервері ще не запущено SQL з docs/supabase-v3.sql';
+  if (msg.includes('durak') && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
+    return 'На сервері ще не запущено SQL з docs/supabase-v10.sql';
   if (msg.includes('duel') && (msg.includes('schema cache') || msg.includes('does not exist')))
     return 'На сервері ще не запущено SQL з docs/supabase-duels.sql';
   if (msg.includes('schema cache') || msg.includes('does not exist')) return 'На сервері ще не запущено SQL з docs/supabase.sql';
@@ -397,4 +406,84 @@ export async function myReferrals(): Promise<number> {
 export function inviteLink(code: string) {
   // Посилання відкриває чат бота: друг тисне «Старт», і бот дає кнопку входу в гру з кодом запрошення.
   return BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=ref_${code}` : `${WEB_URL}?ref=${code}`;
+}
+
+export interface DurakTable {
+  id: number;
+  host: string;
+  guest: string | null;
+  stake: number;
+  deck_size: 36 | 54;
+  status: 'open' | 'playing' | 'finished' | 'cancelled';
+  state: unknown;
+  version: number;
+  turn: number | null;
+  loser: number | null;
+  updated_at: string;
+}
+
+export interface DurakLobbyRow {
+  id: number;
+  host: string;
+  host_name: string;
+  stake: number;
+  deck_size: 36 | 54;
+}
+
+/** Відкриті столи інших гравців (docs/supabase-v10.sql). */
+export async function durakLobby(): Promise<DurakLobbyRow[]> {
+  const { data, error } = await db().rpc('durak_lobby');
+  if (error) throw error;
+  return (data ?? []) as DurakLobbyRow[];
+}
+
+/** Мій стіл, що ще чекає або грає, або щойно закінчений. */
+export async function durakMine(): Promise<DurakTable | null> {
+  if (!me) return null;
+  const { data, error } = await db()
+    .from('durak_tables')
+    .select('*')
+    .or(`host.eq.${me.id},guest.eq.${me.id}`)
+    .in('status', ['open', 'playing'])
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return (data?.[0] as DurakTable) ?? null;
+}
+
+export async function durakGet(id: number): Promise<DurakTable | null> {
+  const { data, error } = await db().from('durak_tables').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data as DurakTable | null;
+}
+
+export async function durakCreate(stake: number, deck: 36 | 54): Promise<number> {
+  const { data, error } = await db().rpc('durak_create', { p_stake: Math.round(stake), p_deck: deck });
+  if (error) throw error;
+  return Number(data);
+}
+
+export async function durakCancel(id: number) {
+  const { error } = await db().rpc('durak_cancel', { p_id: id });
+  if (error) throw error;
+}
+
+export async function durakJoin(id: number, state: unknown, turn: number) {
+  const { error } = await db().rpc('durak_join', { p_id: id, p_state: state, p_turn: turn });
+  if (error) throw error;
+}
+
+export async function durakMove(id: number, version: number, state: unknown, turn: number | null, loser: number | null) {
+  const { error } = await db().rpc('durak_move', { p_id: id, p_version: version, p_state: state, p_turn: turn, p_loser: loser });
+  if (error) throw error;
+}
+
+export async function durakClaim(id: number) {
+  const { error } = await db().rpc('durak_claim', { p_id: id });
+  if (error) throw error;
+}
+
+export async function profileName(id: string): Promise<string | null> {
+  const { data } = await db().from('profiles').select('name').eq('id', id).maybeSingle();
+  return (data?.name as string) ?? null;
 }

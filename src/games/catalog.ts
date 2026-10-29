@@ -21,7 +21,8 @@ export type GameKind =
   | 'dig'
   | 'tower'
   | 'colorwheel'
-  | 'chicken';
+  | 'chicken'
+  | 'durak';
 
 export type Category = 'popular' | 'new' | 'slots' | 'special' | 'jackpot' | 'fast' | 'table';
 
@@ -418,6 +419,17 @@ export const GAMES: GameInfo[] = [
     description: 'Одне зеро, ставки на числа, кольори, дюжини.',
   },
   {
+    id: 'durak',
+    music: 'lobby',
+    title: 'Дурак',
+    emoji: '🃏',
+    colors: ['#15803D', '#052E16'],
+    kind: 'durak',
+    categories: ['table', 'new', 'popular'],
+    tag: 'NEW',
+    description: 'Підкидний дурак на 36 або 54 карти: з ботом або онлайн з живими гравцями.',
+  },
+  {
     id: 'blackjack',
     music: 'lobby',
     title: 'Блекджек',
@@ -466,6 +478,6 @@ export function findGame(id: string): GameInfo | undefined {
 
 export function groupOf(kind: GameKind): 'slot' | 'table' | 'fast' {
   if (kind === 'slot' || kind === 'tumble' || kind === 'holdwin') return 'slot';
-  if (['roulette', 'blackjack', 'baccarat', 'poker', 'hilo'].includes(kind)) return 'table';
+  if (['roulette', 'blackjack', 'baccarat', 'poker', 'hilo', 'durak'].includes(kind)) return 'table';
   return 'fast';
 }

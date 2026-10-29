@@ -9,6 +9,7 @@ import { GameInfo, GameKind } from '../games/catalog';
 import { CoinGame } from '../games/CoinGame';
 import { CrashGame } from '../games/CrashGame';
 import { DiceGame } from '../games/DiceGame';
+import { DurakGame } from '../games/DurakGame';
 import { HiLoGame } from '../games/HiLoGame';
 import { HoldWinGame } from '../games/HoldWinGame';
 import { MineGame } from '../games/MineGame';
@@ -42,6 +43,7 @@ const COMPONENTS: Record<GameKind, ComponentType<{ game: GameInfo }>> = {
   tower: TowerGame,
   colorwheel: ColorWheelGame,
   chicken: ChickenGame,
+  durak: DurakGame,
 };
 
 export function GameScreen({ game, onClose }: { game: GameInfo; onClose: () => void }) {
