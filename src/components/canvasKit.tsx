@@ -118,7 +118,8 @@ export function emojiOf(e: string, px: number) {
 export function drawEmoji(ctx: Ctx, e: string, x: number, y: number, d: number) {
   // Емодзі рендеримо з урахуванням щільності екрана, щоб не було мила.
   const k = ctx.getTransform().a || 1;
-  const im = emojiOf(e, Math.max(8, Math.round(d * k)));
+  // Розмір кешу округлюємо вгору до кроку 16 px, щоб пульсація не створювала нових картинок щокадру.
+  const im = emojiOf(e, Math.max(16, Math.ceil((d * k) / 16) * 16));
   const s = d * 1.4;
   ctx.drawImage(im, x - s / 2, y - s / 2, s, s);
 }

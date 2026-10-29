@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { playMusic, sfx, useSettings } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
+import { WEB } from '../components/canvasKit';
 import { DropCell } from '../components/DropCell';
+import { TumbleBoard } from '../components/TumbleBoard';
 import { BetSelector, BigButton, Chip, ResultLine, haptic } from '../components/ui';
 import { WinCounter } from '../components/WinCounter';
 import { useWallet } from '../state/WalletContext';
@@ -161,6 +163,9 @@ export function TumbleGame({ game }: { game: GameInfo }) {
         </View>
       )}
       <View style={[styles.machine, { borderColor: game.colors[0], backgroundColor: game.colors[1] }]}>
+        {WEB ? (
+          <TumbleBoard grid={grid} remove={remove} busy={busy} size={size} gap={4} emojiOf={emojiOf} />
+        ) : (
         <View style={styles.cols}>
           {grid.map((col, ci) => (
             <View key={ci} style={[styles.col, { height: ROWS * size + (ROWS - 1) * 4 }]}>
@@ -185,6 +190,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
             </View>
           ))}
         </View>
+        )}
         {mult !== null && (
           <View style={styles.multOverlay} pointerEvents="none">
             <Text style={styles.multBig}>×{mult}</Text>
