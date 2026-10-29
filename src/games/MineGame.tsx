@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { createElement, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sfx } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
@@ -76,8 +76,7 @@ const BlockView = memo(function BlockView({
   const lastKey = useRef(shakeKey);
   if (lastKey.current !== shakeKey) {
     lastKey.current = shakeKey;
-    // На вебі трясіння блоків пропускаємо: пружинна анімація на JS дає лаги.
-    if (!WEB) shake.setValue(1);
+    shake.setValue(1);
     Animated.spring(shake, { toValue: 0, friction: 3, tension: 200, useNativeDriver: true }).start();
   }
   if (block.broken)
@@ -106,10 +105,139 @@ const BlockView = memo(function BlockView({
 });
 
 const NOOP = () => {};
-// На вебі кирку й камеру рухаємо прямо через DOM-стилі: Animated без нативного драйвера тут гальмує.
+// На вебі шахта малюється на Canvas (див. drawMine), на телефонах без вебу лишаються звичайні View.
 const WEB = Platform.OS === 'web';
-type DomNode = { style: Record<string, string> } | null;
-const dom = (r: unknown) => r as DomNode;
+
+// ───────────── Веб: уся шахта малюється на одному Canvas, як у звичайних іграх ─────────────
+
+type Img = { complete: boolean; naturalWidth: number } & CanvasImageSource;
+function srcOf(m: unknown): string {
+  if (typeof m === 'string') return m;
+  const o = m as { uri?: string; default?: string } | null;
+  return o?.uri ?? o?.default ?? '';
+}
+function loadImg(m: unknown): Img | null {
+  if (!WEB || typeof document === 'undefined') return null;
+  const im = new (globalThis as unknown as { Image: new () => HTMLImageElement }).Image();
+  im.src = srcOf(m);
+  return im as unknown as Img;
+}
+const CTEX = WEB ? (Object.fromEntries(Object.entries(TEX).map(([k, v]) => [k, loadImg(v)])) as Record<keyof typeof TEX, Img | null>) : null;
+const CCRACKS = WEB ? CRACKS.map(loadImg) : [];
+const CPICKS = WEB ? PICKS.map(loadImg) : [];
+const ready = (im: Img | null | undefined): im is Img => !!im && im.complete && im.naturalWidth > 0;
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+}
+
+function texKey(block: Block, index: number): keyof typeof TEX {
+  if (block.type === 'dirt') return index < MINE_COLS ? 'grass' : 'dirt';
+  if (block.type === 'stone') return index % 3 === 0 ? 'gravel' : 'stone';
+  return block.type;
+}
+
+function drawMine(
+  ctx: CanvasRenderingContext2D,
+  o: { blocks: Block[]; size: number; skyH: number; viewH: number; camY: number; px: number; py: number; deg: number; hp: number; tier: number; parts: Particle[] },
+) {
+  const { blocks, size, skyH, viewH, camY } = o;
+  const w = size * MINE_COLS;
+  ctx.fillStyle = '#140F0B';
+  ctx.fillRect(0, 0, w, viewH);
+  ctx.save();
+  ctx.translate(0, -Math.round(camY));
+  if (camY < skyH) {
+    ctx.fillStyle = '#1E2350';
+    ctx.fillRect(0, 0, w, skyH);
+    ctx.fillStyle = '#FFFFFF';
+    for (const st of STARS) {
+      ctx.globalAlpha = st[2];
+      ctx.fillRect((st[0] / 100) * w, (st[1] / 100) * skyH, 3, 3);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#F4F1C9';
+    ctx.fillRect(w - 40, 12, 22, 22);
+  }
+  const r0 = Math.max(0, Math.floor((camY - skyH) / size));
+  const r1 = Math.min(MINE_ROWS - 1, Math.floor((camY + viewH - skyH) / size));
+  for (let row = r0; row <= r1; row++) {
+    const y = skyH + row * size;
+    const shade = Math.min(0.3, row * 0.018);
+    for (let col = 0; col < MINE_COLS; col++) {
+      const i = row * MINE_COLS + col;
+      const b = blocks[i];
+      const x = col * size;
+      if (b.broken) {
+        const d = CTEX?.dirt;
+        if (ready(d)) ctx.drawImage(d, x, y, size, size);
+        ctx.fillStyle = 'rgba(12,8,4,0.72)';
+        ctx.fillRect(x, y, size, size);
+        continue;
+      }
+      const t = CTEX?.[texKey(b, i)];
+      if (ready(t)) ctx.drawImage(t, x, y, size, size);
+      else {
+        ctx.fillStyle = BLOCKS[b.type].color;
+        ctx.fillRect(x, y, size, size);
+      }
+      const damage = 1 - b.hp / BLOCKS[b.type].hp;
+      if (damage > 0) {
+        const c = CCRACKS[Math.min(2, Math.floor(damage * 3))];
+        if (ready(c)) ctx.drawImage(c, x, y, size, size);
+      }
+      if (shade > 0) {
+        ctx.fillStyle = `rgba(0,0,0,${shade})`;
+        ctx.fillRect(x, y, size, size);
+      }
+    }
+  }
+  for (const p of o.parts) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
+    ctx.fillStyle = p.color;
+    const s = Math.max(2, size * 0.09);
+    ctx.fillRect(p.x * size - s / 2, skyH + p.y * size - s / 2, s, s);
+  }
+  ctx.globalAlpha = 1;
+  // Кирка з HP над нею.
+  const cx = o.px * size;
+  const cy = skyH + o.py * size;
+  const pk = CPICKS[o.tier];
+  if (ready(pk)) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((o.deg * Math.PI) / 180);
+    const ps = size * 0.8;
+    ctx.drawImage(pk, -ps / 2, -ps / 2, ps, ps);
+    ctx.restore();
+  }
+  ctx.font = '900 13px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#000000';
+  const label = `❤ ${o.hp}`;
+  ctx.strokeText(label, cx, cy - size * 0.5 - 6);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(label, cx, cy - size * 0.5 - 6);
+  ctx.restore();
+}
+
+/** Кусочки блоку, що розлітаються при ламанні. */
+function burst(parts: Particle[], blocks: Block[], broken: number[]) {
+  for (const i of broken) {
+    const info = BLOCKS[blocks[i].type];
+    const bx = (i % MINE_COLS) + 0.5;
+    const by = Math.floor(i / MINE_COLS) + 0.5;
+    for (let k = 0; k < 6; k++)
+      parts.push({ x: bx, y: by, vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 5 - 1, life: 0.5 + Math.random() * 0.3, color: k % 2 ? info.color : info.dark });
+  }
+  if (parts.length > 120) parts.splice(0, parts.length - 120);
+}
 
 // Рулетка, яка вибирає кирку на заїзд: від дерев'яної (мало HP) до алмазної (найбільше HP).
 const ROLL_ITEM = 76;
@@ -189,10 +317,8 @@ export function MineGame({
   const contentH = skyH + size * MINE_ROWS;
   const viewH = Math.min(contentH, Math.max(320, height - 300));
   const cam = useRef(new Animated.Value(0)).current;
-  const pickRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const pickImgRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const camRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const lastHitSfx = useRef(0);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pick = PICK_TIERS[tier];
 
   useEffect(
@@ -252,16 +378,36 @@ export function MineGame({
     let next = 0;
     let camY = 0;
     cam.setValue(0);
-    const move = (x: number, y: number, deg: number, cy: number) => {
-      const p = dom(pickRef.current);
-      const im = dom(pickImgRef.current);
-      const c = dom(camRef.current);
-      if (WEB && p && im && c) {
-        p.style.transform = `translate3d(${x}px,${y}px,0)`;
-        im.style.transform = `rotate(${deg}deg)`;
-        c.style.transform = `translate3d(0,${-cy}px,0)`;
-        return;
+    const parts: Particle[] = [];
+    let ctx: CanvasRenderingContext2D | null = null;
+    let lastT = Date.now();
+    let hpNow = pick.hp;
+    const paint = (fx: number, fy: number, deg: number, cy: number) => {
+      const cv = canvasRef.current;
+      if (!cv) return;
+      if (!ctx) {
+        const dpr = Math.min(3, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
+        cv.width = Math.round(size * MINE_COLS * dpr);
+        cv.height = Math.round(viewH * dpr);
+        ctx = cv.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.imageSmoothingEnabled = false;
       }
+      const now = Date.now();
+      const dt = Math.min(0.05, (now - lastT) / 1000);
+      lastT = now;
+      for (let k = parts.length - 1; k >= 0; k--) {
+        const p = parts[k];
+        p.vy += 18 * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) parts.splice(k, 1);
+      }
+      drawMine(ctx, { blocks: cur, size, skyH, viewH, camY: cy, px: fx, py: fy, deg, hp: hpNow, tier, parts });
+    };
+    const move = (x: number, y: number, deg: number, cy: number) => {
       pos.setValue({ x, y });
       rot.setValue(deg);
       cam.setValue(-cy);
@@ -275,7 +421,7 @@ export function MineGame({
       // Камера плавно тримає кирку у верхній чверті вікна, тож небо швидко зникає.
       const target = Math.max(0, Math.min(contentH - viewH, skyH + r.frames[f * 3 + 1] * size - viewH * 0.22));
       camY = play.current.skip ? target : camY + (target - camY) * 0.12;
-      move(r.frames[f * 3] * size - size / 2, r.frames[f * 3 + 1] * size - size / 2, r.frames[f * 3 + 2], camY);
+      if (!WEB) move(r.frames[f * 3] * size - size / 2, r.frames[f * 3 + 1] * size - size / 2, r.frames[f * 3 + 2], camY);
       let changed = false;
       while (next < r.hits.length && r.hits[next].frame <= f) {
         const h = r.hits[next++];
@@ -284,7 +430,9 @@ export function MineGame({
         cur = strike(cur, h.index, pick.power).blocks.map((b, k) => (b.hp === prev[k].hp && b.broken === prev[k].broken ? prev[k] : b));
         value += h.value;
         changed = true;
+        hpNow = h.pickHp;
         setPickHp(h.pickHp);
+        if (WEB && !play.current.skip) burst(parts, cur, h.broken);
         if (!WEB) setShakes((s) => ({ ...s, [h.index]: (s[h.index] ?? 0) + 1 }));
         if (play.current.skip) continue;
         if (h.exploded) {
@@ -304,8 +452,10 @@ export function MineGame({
           sfx('coin', 0.6);
         }
       }
+      if (WEB) paint(r.frames[f * 3], r.frames[f * 3 + 1], r.frames[f * 3 + 2], camY);
       if (changed) {
-        setBlocks(cur);
+        // На вебі шахту малює Canvas, тож React-дерево блоків не чіпаємо.
+        if (!WEB) setBlocks(cur);
         setRunValue(value);
         onProgress?.(Math.round(value * stake));
       }
@@ -352,7 +502,10 @@ export function MineGame({
       {blocks && phase === 'run' ? (
         <View style={styles.mine}>
           <View style={[styles.window, { width: size * MINE_COLS, height: viewH }]}>
-          <Animated.View ref={camRef} style={WEB ? styles.willMove : { transform: [{ translateY: cam }] }}>
+          {WEB ? (
+            createElement('canvas', { ref: canvasRef, style: { width: size * MINE_COLS, height: viewH, display: 'block' } })
+          ) : (
+          <Animated.View style={{ transform: [{ translateY: cam }] }}>
           <View style={[styles.sky, { width: size * MINE_COLS, height: skyH }]}>
             {STARS.map((st, k) => (
               <View key={k} style={[styles.star, { left: `${st[0]}%`, top: `${st[1]}%`, opacity: st[2] }]} />
@@ -365,18 +518,18 @@ export function MineGame({
             ))}
             <Animated.View
               pointerEvents="none"
-              ref={pickRef}
-              style={[styles.pick, styles.willMove, { width: size, height: size }, !WEB && { transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}
+              style={[styles.pick, { width: size, height: size }, { transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}
             >
               <View style={[styles.hp, { top: -20, width: size * 1.6, left: -size * 0.3 }]}>
                 <Text style={styles.hpText}>❤ {pickHp}</Text>
               </View>
-              <Animated.View ref={pickImgRef} style={!WEB && { transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}>
+              <Animated.View style={{ transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}>
                 <Image source={PICKS[tier]} style={{ width: size * 0.8, height: size * 0.8 }} />
               </Animated.View>
             </Animated.View>
           </View>
           </Animated.View>
+          )}
           </View>
           <View style={styles.btnRow}>
             <BigButton label="⏩ ПРОПУСТИТИ" color={colors.blue} onPress={() => (play.current.skip = true)} style={styles.half} />
@@ -425,7 +578,6 @@ const styles = StyleSheet.create({
   energy: { width: '100%', height: 10, borderRadius: 5, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   energyFill: { height: '100%', backgroundColor: colors.green },
   mine: { gap: 0, alignItems: 'center' },
-  willMove: Platform.OS === 'web' ? ({ willChange: 'transform' } as object) : {},
   window: { overflow: 'hidden', borderRadius: 12, alignSelf: 'center', backgroundColor: '#140F0B' },
   grass: { height: 10, alignSelf: 'stretch', backgroundColor: '#4CAF50', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' },
