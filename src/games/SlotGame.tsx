@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sfx, useSettings } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
+import { CanvasReels, WinLine } from '../components/CanvasReels';
 import { Reel } from '../components/Reel';
 import { BetSelector, BigButton, Chip, ResultLine, haptic } from '../components/ui';
 import { WinCounter } from '../components/WinCounter';
@@ -15,6 +16,9 @@ import { Grid, ROWS, SlotConfig, evaluateGrid, paylines, randomSymbol, spinGrid 
 const REEL_BASE_MS = 700;
 const KARAS_FREE_SPINS = 5;
 const REEL_STEP_MS = 260;
+// Якщо вже випало 2 скатери, наступні барабани крутяться довше й світяться.
+const TEASE_MS = 750;
+const WEB = Platform.OS === 'web';
 
 export function SlotGame({ game }: { game: GameInfo }) {
   const config = game.slot!;
@@ -24,6 +28,8 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const [grid, setGrid] = useState<Grid>(() => spinGrid(config));
   const [spinning, setSpinning] = useState<boolean[]>(Array(config.reels).fill(false));
   const [highlight, setHighlight] = useState<boolean[][]>([]);
+  const [winLines, setWinLines] = useState<WinLine[]>([]);
+  const [tease, setTease] = useState<boolean[]>([]);
   const [message, setMessage] = useState({ text: 'Удачі!', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const [freeSpins, setFreeSpins] = useState(0);
   // У «Золотому Карасі» скатери дають 5 фриспінів, їхній виграш іде в банк, а колесо фортуни множить банк.
@@ -62,16 +68,29 @@ export function SlotGame({ game }: { game: GameInfo }) {
     const lastFree = karasFree && freeSpins <= 1 && !retrigger;
     setGrid(result);
     setHighlight([]);
+    setWinLines([]);
     setSpinning(Array(config.reels).fill(true));
     sfx('spin', 0.5);
     setMessage({ text: free ? `Фриспін! Залишилось ${freeSpins - 1}` : 'Крутимо...', tone: 'neutral' });
 
+    // Інтрига: після двох скатерів решта барабанів зупиняється повільніше.
+    const teased: boolean[] = [];
+    const stopAt: number[] = [];
+    let seen = 0;
+    let extra = 0;
+    for (let i = 0; i < config.reels; i++) {
+      teased.push(!!config.scatter && seen >= 2);
+      if (teased[i]) extra += TEASE_MS;
+      stopAt.push(base + i * stepMs + extra);
+      seen += result[i].filter((s) => s.id === config.scatter).length;
+    }
+    setTease(teased);
     for (let i = 0; i < config.reels; i++) {
       timers.current.push(
         setTimeout(() => {
           setSpinning((prev) => prev.map((v, idx) => (idx === i ? false : v)));
-          sfx('stop', 0.5);
-        }, base + i * stepMs),
+          sfx(teased[i] && result[i].some((s) => s.id === config.scatter) ? 'lock' : 'stop', 0.5);
+        }, stopAt[i]),
       );
     }
 
@@ -93,6 +112,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
           for (let reel = 0; reel < config.reels; reel++) marks[reel][1] = true;
         }
         setHighlight(marks);
+        setWinLines(outcome.lineWins.map((w) => ({ rows: lines[w.line], count: w.count })));
 
         const parts: string[] = [];
         if (outcome.jackpot) {
@@ -144,7 +164,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
         } else {
           setMessage({ text: 'Ще раз?', tone: 'lose' });
         }
-      }, base + (config.reels - 1) * stepMs + 60),
+      }, stopAt[config.reels - 1] + 60),
     );
   };
 
@@ -187,6 +207,21 @@ export function SlotGame({ game }: { game: GameInfo }) {
         </View>
       )}
       <View style={[styles.machine, { borderColor: game.colors[0] }]}>
+        {WEB ? (
+          <CanvasReels
+            grid={grid}
+            spinning={spinning}
+            highlight={highlight}
+            lines={winLines}
+            tease={tease}
+            size={size}
+            gap={6}
+            art={game.art}
+            artCell={!!game.art}
+            randomSymbol={() => randomSymbol(config)}
+            speed={settings.fastSpin ? 160 : 240}
+          />
+        ) : (
         <View style={styles.reels}>
           {grid.map((column, i) => (
             <Reel
@@ -208,6 +243,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
             />
           ))}
         </View>
+        )}
         {freeSpins > 0 && (
           <Text style={styles.free}>
             Фриспіни: {freeSpins}
