@@ -22,6 +22,7 @@ export type GameKind =
   | 'tower'
   | 'colorwheel'
   | 'chicken'
+  | 'plane'
   | 'durak';
 
 export type Category = 'popular' | 'new' | 'slots' | 'special' | 'jackpot' | 'fast' | 'table';
@@ -340,6 +341,17 @@ export const GAMES: GameInfo[] = [
     categories: ['fast', 'new', 'popular'],
     tag: 'NEW',
     description: 'Кирка падає в шахту без дна й ламає блоки, поки має HP. Розбивай жили руди, підривай динаміт і лови ящики покращення.',
+  },
+  {
+    id: 'potuzhnolit',
+    music: 'lobby',
+    title: 'Потужноліт',
+    emoji: '✈️',
+    colors: ['#E9A70E', '#1E293B'],
+    kind: 'plane',
+    categories: ['fast', 'new', 'popular'],
+    tag: 'NEW',
+    description: 'Літак злітає з авіаносця й сам летить над морем: монети +1…+4 і ×2…×4 ростять множник, ракети ділять його навпіл. Сів на корабель: виграш до ×50.',
   },
   {
     id: 'crash',

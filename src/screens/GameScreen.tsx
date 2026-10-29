@@ -14,6 +14,7 @@ import { HiLoGame } from '../games/HiLoGame';
 import { HoldWinGame } from '../games/HoldWinGame';
 import { MineGame } from '../games/MineGame';
 import { MinesGame } from '../games/MinesGame';
+import { PlaneGame } from '../games/PlaneGame';
 import { PlinkoGame } from '../games/PlinkoGame';
 import { PokerGame } from '../games/PokerGame';
 import { RouletteGame } from '../games/RouletteGame';
@@ -43,6 +44,7 @@ const COMPONENTS: Record<GameKind, ComponentType<{ game: GameInfo }>> = {
   tower: TowerGame,
   colorwheel: ColorWheelGame,
   chicken: ChickenGame,
+  plane: PlaneGame,
   durak: DurakGame,
 };
 

@@ -22,6 +22,18 @@ export function GameTile({
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ width }, pressed && styles.pressed]}>
       <LinearGradient colors={game.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.tile, { height: width * 1.2 }]}>
+        {/* Сяйво за іконкою і відблиск згори роблять плитку об'ємною. */}
+        <View
+          pointerEvents="none"
+          style={[styles.glow, { width: width * 0.9, height: width * 0.9, borderRadius: width * 0.45, top: width * 0.08 }]}
+        />
+        <LinearGradient
+          pointerEvents="none"
+          colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.6, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
         {game.art?.cover ?? game.art?.wild ? (
           <Image source={game.art.cover ?? game.art.wild} style={[styles.emoji, { width: width * 0.62, height: width * 0.62, borderRadius: width * 0.12 }]} />
         ) : (
@@ -46,8 +58,16 @@ export function GameTile({
 }
 
 const styles = StyleSheet.create({
-  tile: { borderRadius: 16, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  emoji: { marginBottom: 18 },
+  tile: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  glow: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.16)' },
+  emoji: { marginBottom: 18, textShadowColor: 'rgba(0,0,0,0.45)', textShadowRadius: 10, textShadowOffset: { width: 0, height: 4 } },
   tag: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
   tagText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
   fav: { position: 'absolute', top: 4, right: 6 },
@@ -59,8 +79,16 @@ const styles = StyleSheet.create({
     right: 0,
     paddingVertical: 6,
     paddingHorizontal: 6,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  title: { color: colors.text, fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  title: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 3,
+    textShadowOffset: { width: 0, height: 1 },
+  },
   pressed: { transform: [{ scale: 0.96 }] },
 });

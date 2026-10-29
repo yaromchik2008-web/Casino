@@ -90,7 +90,7 @@ export function ChickenGame({ game }: { game: GameInfo }) {
   }, [lane]);
   // Веб: дорога на канвасі; тут лише стан анімацій (стрибок курки, наїзд машини, камера).
   const [roadW, setRoadW] = useState(360);
-  const anim = useRef({ from: 0, to: 0, at: 0, cam: 0, crashAt: 0 });
+  const anim = useRef({ from: 0, to: 0, at: 0, cam: 0, crashAt: 0, winAt: 0 });
   const prevLane = useRef(0);
   if (prevLane.current !== lane) {
     anim.current = { ...anim.current, from: prevLane.current, to: lane, at: performance.now() };
@@ -98,6 +98,8 @@ export function ChickenGame({ game }: { game: GameInfo }) {
   }
   if (crash != null && !anim.current.crashAt) anim.current.crashAt = performance.now();
   if (crash == null) anim.current.crashAt = 0;
+  if (banner?.win && !anim.current.winAt) anim.current.winAt = performance.now();
+  if (!banner?.win) anim.current.winAt = 0;
 
   const start = () => {
     if (!wallet.bet(game.id, 'fast', bet)) return setMessage({ text: 'Недостатньо коштів', tone: 'lose' });
@@ -242,7 +244,7 @@ function drawRoad(
   now: number,
   W: number,
   g: { lane: number; crash: number | null; active: boolean; lanes: number; level: number; mult: (k: number) => number },
-  a: { from: number; to: number; at: number; cam: number; crashAt: number },
+  a: { from: number; to: number; at: number; cam: number; crashAt: number; winAt: number },
 ) {
   const lite = getSettings().lite;
   const hop = Math.min(1, (now - a.at) / HOP_MS);
@@ -255,7 +257,14 @@ function drawRoad(
   a.cam += (target - a.cam) * 0.15;
   if (Math.abs(target - a.cam) < 0.5) a.cam = target;
   const cam = a.cam;
+  const landT = now - a.at - HOP_MS; // скільки мс минуло від приземлення
+  const crashT = g.crash != null && a.crashAt ? now - a.crashAt : -1;
   ctx.save();
+  // Удар машини трусить усю дорогу.
+  if (crashT >= 0 && crashT < 380) {
+    const k = (1 - crashT / 380) * 9;
+    ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
+  }
   ctx.translate(-Math.round(cam), 0);
   // Узбіччя з кущами.
   ctx.fillStyle = '#86C45A';
@@ -271,8 +280,28 @@ function drawRoad(
   const barrier = imageOf(ART.barrier);
   for (let n = first; n <= last; n++) {
     const x = laneX(n);
-    ctx.fillStyle = '#6B7280';
+    // Асфальт: темніший до країв смуги, з дрібною крихтою й тріщинами.
+    const asph = ctx.createLinearGradient(x, 0, x + LANE_W, 0);
+    asph.addColorStop(0, '#4B515A');
+    asph.addColorStop(0.5, '#5F6670');
+    asph.addColorStop(1, '#4B515A');
+    ctx.fillStyle = asph;
     ctx.fillRect(x, 0, LANE_W, ROAD_H);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    for (let k = 0; k < 18; k++) ctx.fillRect(x + hash(n * 31 + k) * LANE_W, hash(n * 17 + k * 3) * ROAD_H, 2, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    for (let k = 0; k < 10; k++) ctx.fillRect(x + hash(n * 7 + k * 5) * LANE_W, hash(n * 13 + k) * ROAD_H, 3, 2);
+    if (hash(n * 3.3) > 0.55) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const cy = hash(n * 9.1) * ROAD_H * 0.8;
+      ctx.moveTo(x + 14, cy);
+      ctx.lineTo(x + 30, cy + 12);
+      ctx.lineTo(x + 26, cy + 30);
+      ctx.lineTo(x + 44, cy + 44);
+      ctx.stroke();
+    }
     ctx.fillStyle = '#F3F4F6';
     for (let d = 0; d < 7; d++) {
       roundRect(ctx, x + LANE_W - 2, d * 46 + 6, 4, 24, 2);
@@ -282,14 +311,39 @@ function drawRoad(
     const passed = n < g.lane || (here && g.crash == null);
     const hx = x + (LANE_W - 68) / 2;
     const hy = ROAD_H / 2 - 34;
+    if (passed) {
+      // Пройдені люки світяться золотом.
+      const pulse = here ? 0.55 + 0.25 * Math.sin(now / 160) : 0.35;
+      const gl = ctx.createRadialGradient(x + LANE_W / 2, ROAD_H / 2, 10, x + LANE_W / 2, ROAD_H / 2, 54);
+      gl.addColorStop(0, `rgba(255,213,74,${pulse})`);
+      gl.addColorStop(1, 'rgba(255,213,74,0)');
+      ctx.fillStyle = gl;
+      ctx.fillRect(x, ROAD_H / 2 - 54, LANE_W, 108);
+    }
     const im = passed ? gold : hole;
     if (im) ctx.drawImage(im, hx, hy, 68, 68);
+    if (g.active && n === g.lane + 1) {
+      // Наступна смуга: пульсує ціль.
+      ctx.strokeStyle = `rgba(255,255,255,${0.45 + 0.35 * Math.sin(now / 140)})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 6]);
+      ctx.lineDashOffset = -now / 30;
+      ctx.beginPath();
+      ctx.arc(x + LANE_W / 2, ROAD_H / 2, 40, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     if (!here) {
       const m = g.mult(n);
       const txt = m >= 1000 ? `×${Math.round(m / 100) / 10}k` : `×${m}`;
       label(ctx, txt, x + LANE_W / 2, ROAD_H / 2, 14, passed ? '#7C2D12' : '#FFFFFF', 900, passed ? '' : 'rgba(0,0,0,0.7)');
     }
-    if (passed && !here && barrier) ctx.drawImage(barrier, x + (LANE_W - 70) / 2, 30, 70, 56);
+    if (passed && !here && barrier) {
+      // Шлагбаум падає зверху щойно курка перейшла смугу.
+      const bt = n === g.lane - 1 ? Math.min(1, Math.max(0, landT / 260)) : 1;
+      const by = -60 + 90 * (1 - (1 - bt) ** 3) + (bt < 1 ? 0 : 0);
+      ctx.drawImage(barrier, x + (LANE_W - 70) / 2, by, 70, 56);
+    }
     // Машини мчать по смугах попереду (на айфоні в легкому режимі їх немає).
     if (g.active && !lite && n > g.lane && n <= g.lane + 4) {
       const seed = n * 7 + g.level;
@@ -299,13 +353,7 @@ function drawRoad(
       if (ph < drive) {
         const y = -CAR_H - 10 + (ROAD_H + CAR_H + 20) * (ph / drive);
         const car = imageOf(ART.cars[seed % ART.cars.length]);
-        if (car) {
-          ctx.save();
-          ctx.translate(x + LANE_W / 2, y + CAR_H / 2);
-          ctx.rotate(Math.PI);
-          ctx.drawImage(car, -CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
-          ctx.restore();
-        }
+        if (car) drawCar(ctx, car, x + LANE_W / 2, y + CAR_H / 2, true);
       }
     }
   }
@@ -322,18 +370,66 @@ function drawRoad(
     const car = imageOf(ART.cars[g.crash % 4]);
     const x = laneX(g.crash) + (LANE_W - CAR_W) / 2;
     const y = -CAR_H + (ROAD_H / 2 - 10) * t;
-    if (car) {
-      ctx.save();
-      ctx.translate(x + CAR_W / 2, y + CAR_H / 2);
-      ctx.rotate(Math.PI);
-      ctx.drawImage(car, -CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
-      ctx.restore();
-    }
+    if (car) drawCar(ctx, car, x + CAR_W / 2, y + CAR_H / 2, t < 1);
   }
   // Курка стрибає дугою на наступну смугу.
   const chick = imageOf(g.crash != null && hop >= 1 ? ART.hit : ART.chicken);
-  const jump = Math.sin(hop * Math.PI) * 26;
-  if (chick) ctx.drawImage(chick, cxNow - 40, ROAD_H / 2 - 60 - jump, 80, 80);
+  const jump = Math.sin(hop * Math.PI) * 30;
+  // Тінь під куркою меншає в стрибку.
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(cxNow, ROAD_H / 2 + 16, 26 - jump * 0.3, 8 - jump * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  let fxBusy = false;
+  // Пил і золоті іскри при приземленні.
+  if (a.to > 0 && landT >= 0 && landT < 650 && g.crash == null) {
+    fxBusy = true;
+    const t = landT / 650;
+    ctx.fillStyle = `rgba(220,220,210,${0.5 * (1 - t)})`;
+    for (let k = 0; k < 6; k++) {
+      const dir = k < 3 ? -1 : 1;
+      ctx.beginPath();
+      ctx.arc(cxNow + dir * (10 + t * 34 + (k % 3) * 6), ROAD_H / 2 + 14 - (k % 3) * 4, 5 + t * 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let k = 0; k < 12; k++) {
+      const ang = (k / 12) * Math.PI * 2 + a.to;
+      const d = 12 + t * 60;
+      ctx.fillStyle = `rgba(255,${200 + (k % 3) * 20},74,${1 - t})`;
+      ctx.fillRect(cxNow + Math.cos(ang) * d - 2, ROAD_H / 2 - Math.sin(ang) * d * 0.7 - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1 - t;
+    label(ctx, `×${g.mult(g.lane)}`, cxNow, ROAD_H / 2 - 74 - t * 40, 22, '#FFE58A');
+    ctx.globalAlpha = 1;
+  }
+  if (chick) {
+    // Сплющується при приземленні, як у мультиках.
+    const sq = landT >= 0 && landT < 160 && g.crash == null ? Math.sin((landT / 160) * Math.PI) * 0.16 : 0;
+    const w = 80 * (1 + sq);
+    const h = 80 * (1 - sq);
+    ctx.drawImage(chick, cxNow - w / 2, ROAD_H / 2 - 60 - jump + (80 - h), w, h);
+  }
+  // Пір'я розлітається від удару.
+  if (crashT >= 0 && crashT < 1200) {
+    fxBusy = true;
+    const t = crashT / 1200;
+    for (let k = 0; k < 16; k++) {
+      const ang = hash(k + 1) * Math.PI * 2;
+      const v = 50 + hash(k + 7) * 90;
+      const fx2 = cxNow + Math.cos(ang) * v * t;
+      const fy = ROAD_H / 2 - 20 + Math.sin(ang) * v * t * 0.8 + 60 * t * t;
+      ctx.save();
+      ctx.translate(fx2, fy);
+      ctx.rotate(t * 6 + k);
+      ctx.globalAlpha = 1 - t;
+      ctx.fillStyle = k % 4 === 0 ? '#F59E0B' : '#FFFFFF';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 7, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
   if (g.crash == null && g.lane > 0 && hop >= 1) {
     const txt = `×${g.mult(g.lane)}`;
     ctx.font = `900 13px ${FONT}`;
@@ -344,8 +440,72 @@ function drawRoad(
     label(ctx, txt, cxNow, ROAD_H / 2 + 37, 13, '#FFFFFF', 900, '');
   }
   ctx.restore();
+  // Червоний спалах при ударі.
+  if (crashT >= 0 && crashT < 500) {
+    ctx.fillStyle = `rgba(220,38,38,${0.35 * (1 - crashT / 500)})`;
+    ctx.fillRect(0, 0, W, ROAD_H);
+  }
+  // Конфеті, коли забрав виграш.
+  const winT = a.winAt ? now - a.winAt : -1;
+  if (winT >= 0 && winT < 1800) {
+    fxBusy = true;
+    const t = winT / 1800;
+    const cols = ['#FFD54A', '#22C55E', '#3B82F6', '#EC4899', '#FFFFFF'];
+    for (let k = 0; k < 46; k++) {
+      const x0 = hash(k * 1.7) * W;
+      const fall = (40 + hash(k * 2.3) * 160) * t * 1.6;
+      const y = -10 + fall + hash(k * 4.1) * 40 - 30 * (1 - t);
+      ctx.save();
+      ctx.translate(x0 + Math.sin(t * 8 + k) * 12, y);
+      ctx.rotate(t * 10 + k);
+      ctx.globalAlpha = 1 - t * 0.7;
+      ctx.fillStyle = cols[k % cols.length];
+      ctx.fillRect(-4, -2, 8, 4);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
   const waiting = !hole || !gold || !chick;
-  return waiting || hop < 1 || carBusy || Math.abs(target - a.cam) > 0.5 || (g.active && !lite);
+  return waiting || hop < 1 || carBusy || fxBusy || landT < 300 || Math.abs(target - a.cam) > 0.5 || (g.active && !lite);
+}
+
+const hash = (n: number) => {
+  const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return v - Math.floor(v);
+};
+
+/** Машина згори: тінь, світло фар попереду і сама машина (їде вниз). */
+function drawCar(ctx: Ctx, car: HTMLImageElement, cx: number, cy: number, moving: boolean) {
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  roundRect(ctx, cx - CAR_W / 2 + 4, cy - CAR_H / 2 + 8, CAR_W, CAR_H, 12);
+  ctx.fill();
+  const hl = ctx.createLinearGradient(0, cy + CAR_H / 2 - 6, 0, cy + CAR_H / 2 + 60);
+  hl.addColorStop(0, 'rgba(255,250,210,0.55)');
+  hl.addColorStop(1, 'rgba(255,250,210,0)');
+  ctx.fillStyle = hl;
+  ctx.beginPath();
+  ctx.moveTo(cx - CAR_W * 0.38, cy + CAR_H / 2 - 6);
+  ctx.lineTo(cx - CAR_W * 0.75, cy + CAR_H / 2 + 60);
+  ctx.lineTo(cx + CAR_W * 0.75, cy + CAR_H / 2 + 60);
+  ctx.lineTo(cx + CAR_W * 0.38, cy + CAR_H / 2 - 6);
+  ctx.closePath();
+  ctx.fill();
+  if (moving) {
+    // Смуги швидкості позаду.
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const dx of [-0.32, 0, 0.32]) {
+      ctx.moveTo(cx + dx * CAR_W, cy - CAR_H / 2 - 4);
+      ctx.lineTo(cx + dx * CAR_W, cy - CAR_H / 2 - 34);
+    }
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.PI);
+  ctx.drawImage(car, -CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
+  ctx.restore();
 }
 
 const styles = StyleSheet.create({
