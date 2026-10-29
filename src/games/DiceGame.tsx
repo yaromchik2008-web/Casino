@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { Ctx, FONT, GameCanvas, WEB, label, roundRect } from '../components/canvasKit';
 import { BetSelector, BigButton, Chip, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
@@ -12,6 +13,8 @@ export function DiceGame({ game }: { game: GameInfo }) {
   const [over, setOver] = useState(true);
   const [roll, setRoll] = useState<number | null>(null);
   const [rolling, setRolling] = useState(false);
+  const dice = useRef({ start: 0, from: 50, to: 50 });
+  const [boxW, setBoxW] = useState(320);
   const [message, setMessage] = useState({ text: 'Обери поріг і кидай', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
 
   const chance = over ? 99 - target : target;
@@ -26,12 +29,14 @@ export function DiceGame({ game }: { game: GameInfo }) {
     }
     setRolling(true);
     let ticks = 0;
+    const pre = Math.floor(Math.random() * 100);
+    if (WEB) dice.current = { start: performance.now(), from: roll ?? 50, to: pre };
     const t = setInterval(() => {
       ticks++;
-      setRoll(Math.floor(Math.random() * 100));
+      if (!WEB) setRoll(Math.floor(Math.random() * 100));
       if (ticks >= 12) {
         clearInterval(t);
-        const result = Math.floor(Math.random() * 100);
+        const result = WEB ? pre : Math.floor(Math.random() * 100);
         setRoll(result);
         setRolling(false);
         const won = over ? result > target : result < target;
@@ -49,6 +54,14 @@ export function DiceGame({ game }: { game: GameInfo }) {
 
   return (
     <View style={styles.root}>
+      {WEB ? (
+        <View style={styles.display} onLayout={(e: LayoutChangeEvent) => setBoxW(Math.floor(e.nativeEvent.layout.width) - 36)}>
+          <GameCanvas width={boxW} height={120} draw={(ctx, now) => drawDice(ctx, now, boxW, dice.current, roll, target, over)} />
+          <Text style={styles.caption}>
+            {over ? `Більше за ${target}` : `Менше за ${target}`} · Шанс {chance}% · ×{multiplier}
+          </Text>
+        </View>
+      ) : (
       <View style={styles.display}>
         <Text style={styles.roll}>{roll ?? '--'}</Text>
         <View style={styles.bar}>
@@ -64,6 +77,7 @@ export function DiceGame({ game }: { game: GameInfo }) {
           {over ? `Більше за ${target}` : `Менше за ${target}`} · Шанс {chance}% · ×{multiplier}
         </Text>
       </View>
+      )}
       <View style={styles.row}>
         <Chip label="Більше" active={over} onPress={() => setOver(true)} disabled={rolling} />
         <Chip label="Менше" active={!over} onPress={() => setOver(false)} disabled={rolling} />
@@ -90,3 +104,32 @@ const styles = StyleSheet.create({
   caption: { color: colors.muted, fontWeight: '700' },
   row: { flexDirection: 'row', gap: 8 },
 });
+
+const ROLL_MS = 650;
+
+/** Число «прокручується» до результату, маркер їде по смузі виграшної зони. */
+function drawDice(ctx: Ctx, now: number, W: number, d: { start: number; from: number; to: number }, roll: number | null, target: number, over: boolean) {
+  const t = d.start ? Math.min(1, (now - d.start) / ROLL_MS) : 1;
+  const e = 1 - (1 - t) ** 3;
+  const v = d.start ? d.from + (d.to - d.from) * e : (roll ?? 50);
+  const shownNum = d.start ? (t < 1 ? Math.floor(v + Math.sin(now / 20) * 4 * (1 - t)) : d.to) : roll;
+  ctx.clearRect(0, 0, W, 120);
+  const win = roll != null && t >= 1 && (over ? roll > target : roll < target);
+  label(ctx, shownNum == null ? '--' : String(Math.max(0, Math.min(99, shownNum))), W / 2, 40, 60, t < 1 || roll == null ? '#FFFFFF' : win ? '#22C55E' : '#EF4444', 900, '');
+  const y = 92;
+  ctx.fillStyle = '#7F1D1D';
+  roundRect(ctx, 0, y, W, 14, 7);
+  ctx.fill();
+  ctx.fillStyle = '#22C55E';
+  if (over) roundRect(ctx, (W * (target + 1)) / 100, y, W - (W * (target + 1)) / 100, 14, 7);
+  else roundRect(ctx, 0, y, (W * target) / 100, 14, 7);
+  ctx.fill();
+  if (d.start || roll != null) {
+    const mx = (W * Math.max(0, Math.min(99, v))) / 100;
+    ctx.fillStyle = '#FFFFFF';
+    roundRect(ctx, mx - 3, y - 6, 6, 26, 3);
+    ctx.fill();
+    ctx.font = `800 11px ${FONT}`;
+  }
+  return t < 1;
+}
