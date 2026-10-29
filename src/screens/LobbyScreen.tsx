@@ -23,8 +23,15 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
   const [category, setCategory] = useState<Category | 'all' | 'favorites'>('all');
   const [query, setQuery] = useState('');
   const contentWidth = Math.min(width, 720) - 32;
-  const columns = contentWidth > 500 ? 4 : 3;
-  const tileWidth = (contentWidth - (columns - 1) * 10) / columns;
+  // Реальну ширину сітки міряємо: у Telegram Desktop і браузерах смуга прокрутки з'їдає місце, і третя плитка падала в новий ряд.
+  const [gridW, setGridW] = useState(0);
+  const avail = gridW || contentWidth;
+  const columns = avail > 500 ? 4 : 3;
+  const tileWidth = Math.floor((avail - (columns - 1) * 10) / columns - 0.5);
+  const onGrid = (e: { nativeEvent: { layout: { width: number } } }) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    if (w > 0 && Math.abs(w - gridW) > 1) setGridW(w);
+  };
   const rowTile = Math.min(130, tileWidth);
 
   const filtered = useMemo(() => {
@@ -188,11 +195,11 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
             </Section>
           ))}
           <Section title={`🎮 Усі ігри (${GAMES.length})`}>
-            <View style={styles.grid}>{GAMES.map((g) => tile(g, tileWidth))}</View>
+            <View style={styles.grid} onLayout={onGrid}>{GAMES.map((g) => tile(g, tileWidth))}</View>
           </Section>
         </>
       ) : (
-        <View style={styles.grid}>
+        <View style={styles.grid} onLayout={onGrid}>
           {filtered.length ? (
             filtered.map((g) => tile(g, tileWidth))
           ) : (

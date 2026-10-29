@@ -21,6 +21,13 @@ import { WalletProvider, useWallet } from './src/state/WalletContext';
 import { initTelegram, setTelegramBack } from './src/telegram';
 import { colors, formatCoins } from './src/theme';
 
+// Смуги прокрутки ховаємо: у Telegram Desktop вони з'їдали ширину й ламали сітку ігор.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const st = document.createElement('style');
+  st.textContent = '*{scrollbar-width:none}*::-webkit-scrollbar{width:0;height:0;display:none}';
+  document.head.appendChild(st);
+}
+
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'lobby', label: 'Лобі', icon: '🎰' },
   { id: 'sport', label: 'Спорт', icon: '⚽' },

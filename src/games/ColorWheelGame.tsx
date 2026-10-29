@@ -35,6 +35,13 @@ export function ColorWheelGame({ game }: { game: GameInfo }) {
   const stakesRef = useRef(stakes);
   stakesRef.current = stakes;
   const size = Math.min(320, width - 48);
+  // Кінець відліку для кільця в центрі колеса.
+  const [endAt, setEndAt] = useState(() => Date.now() + BET_SECONDS * 1000);
+  useEffect(() => {
+    if (phase === 'bets') setEndAt(Date.now() + left * 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+  const countColor = left > 6 ? '#4ADE80' : left > 3 ? '#FACC15' : '#F87171';
 
   // Раунд: 10 секунд ставок, оберт, результат, і знову.
   useEffect(() => {
@@ -90,15 +97,22 @@ export function ColorWheelGame({ game }: { game: GameInfo }) {
 
   return (
     <View style={styles.root}>
-      <RingWheel ref={wheel} segments={SEGMENTS} size={size}>
+      <RingWheel
+        ref={wheel}
+        segments={SEGMENTS}
+        size={size}
+        thickness={size * 0.17}
+        countdown={phase === 'bets' ? { end: endAt, total: BET_SECONDS * 1000 } : null}
+      >
         {phase === 'bets' ? (
           <>
-            <Text style={styles.count}>{left}</Text>
+            <Text style={[styles.count, { color: countColor, textShadowColor: countColor }]}>{left}</Text>
             <Text style={styles.countLabel}>ставки</Text>
           </>
         ) : result ? (
           <View style={[styles.resultDot, { backgroundColor: INFO[result].bg }]}>
             <Text style={styles.resultText}>×{COLOR_PAYS[result]}</Text>
+            <Text style={styles.resultSub}>{INFO[result].label.toUpperCase()}</Text>
           </View>
         ) : (
           <Text style={styles.countLabel}>оберт…</Text>
@@ -133,10 +147,19 @@ export function ColorWheelGame({ game }: { game: GameInfo }) {
 
 const styles = StyleSheet.create({
   root: { gap: 12, alignItems: 'center' },
-  count: { color: '#FFFFFF', fontSize: 64, fontWeight: '900' },
+  count: { color: '#FFFFFF', fontSize: 64, fontWeight: '900', textShadowRadius: 14 },
   countLabel: { color: colors.muted, fontWeight: '800' },
-  resultDot: { width: 90, height: 90, borderRadius: 45, alignItems: 'center', justifyContent: 'center' },
-  resultText: { color: '#FFFFFF', fontWeight: '900', fontSize: 26 },
+  resultDot: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  resultText: { color: '#FFFFFF', fontWeight: '900', fontSize: 30 },
+  resultSub: { color: '#FFFFFFCC', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   timeBar: { width: '100%', maxWidth: 360, height: 6, borderRadius: 3, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   timeFill: { height: '100%', backgroundColor: '#A3E635' },
   history: { flexDirection: 'row', gap: 4, minHeight: 14 },
