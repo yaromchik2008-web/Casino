@@ -28,16 +28,16 @@ export const ORE_VALUE: Record<Ore, number> = { copper: 0.015, ruby: 0.05, gold:
 export const ORE_NAME: Record<Ore, string> = { copper: 'Мідь', ruby: 'Рубін', gold: 'Золото', emerald: 'Смарагд', diamond: 'Алмаз' };
 export const isOre = (c: Cell): c is Ore => c in ORE_VALUE;
 
-/** Міцність блоку; руда ламається з одного удару разом з усією жилою. */
+/** Міцність блоку. Руду треба вибити кількома ударами (цінніша міцніша), тоді ламається вся жила. */
 const CELL_HP: Record<Cell, number> = {
   grass: 3,
   dirt: 3,
   stone: 5,
-  copper: 1,
-  ruby: 1,
-  gold: 1,
-  emerald: 1,
-  diamond: 1,
+  copper: 5,
+  ruby: 7,
+  gold: 9,
+  emerald: 12,
+  diamond: 15,
   tnt: 1,
   slime: 1,
   upgrade: 1,
@@ -112,7 +112,7 @@ function oreFor(row: number, rand: () => number): Ore {
 const VEIN: Record<Ore, [number, number]> = { copper: [3, 9], ruby: [2, 7], gold: [2, 6], emerald: [2, 5], diamond: [1, 4] };
 
 /** Тюнінг генерації (симуляція підбирає щільність руди). */
-export const GEN = { veins: 0.05, tnt: 0.012, slime: 0.007, upgrade: 0.0035, repair: 0.008, bedrock: 0.012 };
+export const GEN = { veins: 0.068, tnt: 0.012, slime: 0.007, upgrade: 0.0035, repair: 0.008, bedrock: 0.012 };
 
 /** Добудовує шахту ще на CHUNK рядів. */
 export function grow(m: Mine, rand: () => number = Math.random) {
@@ -147,7 +147,7 @@ export function grow(m: Mine, rand: () => number = Math.random) {
       const i = row * COLS + col;
       if (m.cells[i] === 'stone' || m.cells[i] === 'dirt') {
         m.cells[i] = ore;
-        m.hp[i] = 1;
+        m.hp[i] = CELL_HP[ore];
         k++;
       }
       const dir = Math.floor(rand() * 4);
@@ -323,7 +323,12 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
       return;
     }
     if (isOre(c)) {
-      // Уся жила одного типу ламається разом.
+      hp[i] = Math.max(0, hp[i] - DAMAGE * PICKS[tier].power);
+      if (hp[i] > 0) {
+        events.push({ ...base, kind: 'hit', hp: hp[i], pickHp });
+        return;
+      }
+      // Вибита руда: уся жила одного типу ламається разом.
       const vein: number[] = [];
       const stack = [i];
       broken[i] = true;
