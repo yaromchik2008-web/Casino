@@ -1,9 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { LEVELS, levelName, xpForLevel } from '../state/progress';
+import { MAX_LEVEL, levelName, xpForLevel } from '../state/progress';
 import { colors, formatCoins } from '../theme';
 
 export function LevelBar({ xp, level }: { xp: number; level: number }) {
-  const max = level >= LEVELS.length;
+  const max = level >= MAX_LEVEL;
   const from = xpForLevel(level);
   const to = xpForLevel(level + 1);
   const pct = max ? 1 : (xp - from) / (to - from);

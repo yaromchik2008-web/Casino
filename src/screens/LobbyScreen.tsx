@@ -54,6 +54,14 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
       action: () => onOpenGame('golden-karas'),
     },
     {
+      title: 'Нове: Ковбасний рай',
+      text: 'Від сосиски до краківської. 10 фриспінів і бонуска в бонусці',
+      colors: ['#E85D2C', '#3A0A04'] as const,
+      emoji: '🌭',
+      image: findGame('kovbasa')?.art?.cover,
+      action: () => onOpenGame('kovbasa'),
+    },
+    {
       title: 'Нове: Автобазар',
       text: 'Слот з машинами: від «сімки» до Ікс 3. Поліція-wild, УАЗ дає фриспіни',
       colors: ['#2456B8', '#0B1638'] as const,

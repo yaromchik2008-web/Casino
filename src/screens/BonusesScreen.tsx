@@ -5,7 +5,7 @@ import { LevelBar } from '../components/LevelBar';
 import { StripItem, StripSpinner, StripSpinnerHandle } from '../components/StripSpinner';
 import { BigButton, Panel, haptic } from '../components/ui';
 import { formatDuration, useNow } from '../components/useNow';
-import { MISSIONS, dayId } from '../state/progress';
+import { dailyMissions, dayId } from '../state/progress';
 import { InvitePanel } from './InvitePanel';
 import { StarsPanel } from './StarsPanel';
 import {
@@ -202,12 +202,17 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
       <Panel style={styles.panel}>
         <Text style={styles.cardTitle}>🎯 Завдання дня</Text>
         <Text style={styles.cardSub}>Оновлюються щодня опівночі</Text>
-        {MISSIONS.map((m) => {
+        {dailyMissions().map((m, i, all) => {
           const progress = Math.min(m.goal, s.missionProgress[m.id] ?? 0);
           const claimed = s.missionClaimed.includes(m.id);
           const done = progress >= m.goal;
+          const money = m.id === 'sport';
           return (
-            <View key={m.id} style={styles.mission}>
+            <View key={m.id}>
+            {(i === 0 || m.hard !== all[i - 1].hard) && (
+              <Text style={styles.cardSub}>{m.hard ? '💪 Важкі · по 100 ₴' : '🙂 Легкі · по 50 ₴'}</Text>
+            )}
+            <View style={styles.mission}>
               <Text style={styles.missionIcon}>{m.icon}</Text>
               <View style={styles.missionBody}>
                 <Text style={styles.missionTitle}>{m.title}</Text>
@@ -215,7 +220,7 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
                   <View style={[styles.fill, { width: `${(progress / m.goal) * 100}%` }]} />
                 </View>
                 <Text style={styles.missionMeta}>
-                  {progress}/{m.goal} · нагорода {formatCoins(m.reward)}
+                  {money ? `${formatCoins(progress)} / ${formatCoins(m.goal)}` : `${progress}/${m.goal}`} · нагорода {formatCoins(m.reward)}
                 </Text>
               </View>
               <BigButton
@@ -230,6 +235,7 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
                 }}
                 style={styles.missionBtn}
               />
+            </View>
             </View>
           );
         })}

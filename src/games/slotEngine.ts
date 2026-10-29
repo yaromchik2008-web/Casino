@@ -11,6 +11,8 @@ export interface SlotConfig {
   wild?: string;
   scatter?: string;
   jackpotSymbol?: string;
+  /** Скільки фриспінів дають 3+ scatter (типово FREE_SPINS_AWARD). */
+  freeSpins?: number;
 }
 
 export const ROWS = 3;
@@ -37,6 +39,8 @@ const LINES_5: number[][] = [
 ];
 
 export const FREE_SPINS_AWARD = 8;
+// У фриспінах scatter випадає на чверть рідше, тож повторний бонус (ретригер) трапляється рідше, ніж у звичайній грі.
+export const FREE_SCATTER_SCALE = 0.75;
 
 export function paylines(config: SlotConfig): number[][] {
   return config.reels === 3 ? LINES_3 : LINES_5;
@@ -44,19 +48,20 @@ export function paylines(config: SlotConfig): number[][] {
 
 export type Grid = SlotSymbol[][]; // grid[reel][row]
 
-export function randomSymbol(config: SlotConfig, rand: () => number = Math.random): SlotSymbol {
-  const total = config.symbols.reduce((sum, s) => sum + s.weight, 0);
+export function randomSymbol(config: SlotConfig, rand: () => number = Math.random, free = false): SlotSymbol {
+  const weight = (s: SlotSymbol) => (free && s.id === config.scatter ? s.weight * FREE_SCATTER_SCALE : s.weight);
+  const total = config.symbols.reduce((sum, s) => sum + weight(s), 0);
   let roll = rand() * total;
   for (const s of config.symbols) {
-    roll -= s.weight;
+    roll -= weight(s);
     if (roll < 0) return s;
   }
   return config.symbols[0];
 }
 
-export function spinGrid(config: SlotConfig, rand: () => number = Math.random): Grid {
+export function spinGrid(config: SlotConfig, rand: () => number = Math.random, free = false): Grid {
   return Array.from({ length: config.reels }, () =>
-    Array.from({ length: ROWS }, () => randomSymbol(config, rand)),
+    Array.from({ length: ROWS }, () => randomSymbol(config, rand, free)),
   );
 }
 
@@ -112,7 +117,7 @@ export function evaluateGrid(config: SlotConfig, grid: Grid, bet: number): SlotR
     win,
     lineWins,
     scatterCount,
-    freeSpins: scatterCount >= 3 ? FREE_SPINS_AWARD : 0,
+    freeSpins: scatterCount >= 3 ? config.freeSpins ?? FREE_SPINS_AWARD : 0,
     jackpot,
   };
 }

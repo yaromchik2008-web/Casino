@@ -15,6 +15,7 @@ import {
   findItem,
   hourlyIncome,
   statusFor,
+  vehicleCount,
 } from '../state/shop';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
@@ -94,6 +95,11 @@ export function ShopScreen() {
               <Chip key={c.id} label={`${c.icon} ${c.label}`} active={cat === c.id} onPress={() => setCat(c.id)} />
             ))}
           </View>
+          {cat === 'car' && (
+            <Text style={styles.empty}>
+              🍀 Кожен транспорт додає +1 % до виграшів в іграх. Зараз: +{vehicleCount(s.owned)} %
+            </Text>
+          )}
           {SHOP_ITEMS.filter((i) => i.category === cat && !i.prize).map((item) => {
             const owned = s.owned.includes(item.id);
             const afford = s.balance >= item.price;
@@ -104,6 +110,7 @@ export function ShopScreen() {
                   <Text style={styles.itemTitle}>{item.title}</Text>
                   <Text style={styles.itemPrice}>{formatCoins(item.price)}</Text>
                   {item.income ? <Text style={styles.itemIncome}>+{formatCoins(item.income)} за годину</Text> : null}
+                  {item.category === 'car' ? <Text style={styles.itemIncome}>🍀 +1 % до виграшів</Text> : null}
                 </View>
                 {owned ? (
                   <Text style={styles.owned}>✓ Твоє</Text>

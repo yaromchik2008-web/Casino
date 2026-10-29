@@ -7,6 +7,7 @@ import { BigButton, Chip, Panel, ResultLine, haptic, parseMoney } from '../compo
 import { useNow } from '../components/useNow';
 import { GameInfo, findGame } from '../games/catalog';
 import { MineGame } from '../games/MineGame';
+import { OnlineDurak } from '../games/DurakGame';
 import { Grid, evaluateGrid, randomSymbol, spinGrid } from '../games/slotEngine';
 import {
   Duel,
@@ -26,9 +27,11 @@ import { colors, formatCoins } from '../theme';
 // Ігри для дуелі: обидва грають однаковий раунд без ставок, рахують очки.
 export const DUEL_GAMES: { id: string; rounds: string }[] = [
   { id: 'golden-karas', rounds: '5 обертів' },
-  { id: 'fruit-classic', rounds: '5 обертів' },
-  { id: 'shakhta', rounds: 'Один заїзд у шахту' },
+  { id: 'durak', rounds: 'Одна партія на 36 карт' },
+  { id: 'number', rounds: 'Одне число від 1 до 99' },
 ];
+// «Число» не є грою в лобі, тому має свою назву.
+const NUMBER_DUEL = 'number';
 // Слоти в дуелі: 5 обертів, шахта: один заїзд.
 const DUEL_SPINS = 5;
 const DUEL_SPIN_BET = 100;
@@ -38,6 +41,7 @@ export const INVITE_MS = 60_000;
 export const ROUND_MS = 60_000;
 
 function gameTitle(id: string) {
+  if (id === NUMBER_DUEL) return '🎲 Число 1–99';
   const g = findGame(id);
   return g ? `${g.emoji} ${g.title}` : id;
 }
@@ -71,6 +75,9 @@ export function DuelSetup({ friend, onDone }: { friend: Profile; onDone: (error?
     <Panel style={styles.setup}>
       <Text style={styles.title}>⚔️ Дуель з {friend.name}</Text>
       <Text style={styles.muted}>Обидва ставите однаково. Хто набере більше очок, забирає все. Нічия повертає обом ставку.</Text>
+      <Text style={styles.muted}>
+        {game === 'durak' ? 'Дурак: граєте партію одне проти одного, хто не дурак, той виграв.' : game === NUMBER_DUEL ? 'Число: у кожного один кидок від 1 до 99, у кого більше, той виграв.' : 'Карась: по 5 обертів, хто набере більше очок.'}
+      </Text>
       <View style={styles.wrap}>
         {DUEL_GAMES.map((g) => (
           <Chip key={g.id} label={gameTitle(g.id)} active={game === g.id} onPress={() => setGame(g.id)} />
@@ -183,7 +190,12 @@ export function DuelList({
             </View>
           );
         } else if (d.status === 'accepted' && mine == null) {
-          line = theirs == null ? `${other} теж ще не грав` : `${other} уже зіграв. Твоя черга!`;
+          line =
+            d.game === 'durak'
+              ? `Партія в дурака з ${other}. Заходь за стіл!`
+              : theirs == null
+                ? `${other} теж ще не грав`
+                : `${other} уже зіграв. Твоя черга!`;
           controls = <Chip label="▶ ГРАТИ" active onPress={() => onPlay(d)} />;
         } else if (d.status === 'accepted') {
           line = `Твій результат ${mine} очок. Чекаємо, поки зіграє ${other}`;
@@ -214,6 +226,35 @@ export function DuelList({
 /** Повноекранний раунд дуелі. Результат відправляється одразу після раунду. */
 export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponentName: string; onClose: () => void }) {
   const game = findGame(duel.game);
+  if (duel.game === 'durak' && game) return <DurakDuel duel={duel} game={game} opponentName={opponentName} onClose={onClose} />;
+  return <ScoreDuelPlay duel={duel} opponentName={opponentName} onClose={onClose} game={game} />;
+}
+
+/** Дуель у дурака: жива партія за столом, без таймера на хвилину. */
+function DurakDuel({ duel, game, opponentName, onClose }: { duel: Duel; game: GameInfo; opponentName: string; onClose: () => void }) {
+  useEffect(() => {
+    playMusic(game.music);
+    return () => playMusic('lobby');
+  }, [game.music]);
+  return (
+    <View style={styles.flex}>
+      <View style={styles.bar}>
+        <Pressable onPress={onClose} hitSlop={10}>
+          <Text style={styles.back}>‹ Друзі</Text>
+        </Pressable>
+        <Text style={styles.barTitle} numberOfLines={1}>
+          🃏 {opponentName} · {formatCoins(duel.stake)}
+        </Text>
+      </View>
+      <ScrollView contentContainerStyle={styles.content}>
+        <OnlineDurak game={game} duel={duel} onClose={onClose} />
+      </ScrollView>
+    </View>
+  );
+}
+
+function ScoreDuelPlay({ duel, opponentName, onClose, game }: { duel: Duel; opponentName: string; onClose: () => void; game?: GameInfo }) {
+  const isNumber = duel.game === NUMBER_DUEL;
   const [score, setScore] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
@@ -238,6 +279,7 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
 
   useEffect(() => {
     if (game) playMusic(game.music);
+    if (isNumber) return;
     // Якщо раунд уже починали і вийшли, повторної спроби немає: зараховуємо 0.
     AsyncStorage.getItem(STARTED_KEY).then((raw) => {
       if (raw && raw.split(',').includes(String(duel.id))) {
@@ -265,7 +307,7 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
 
   // Вихід посеред раунду зараховує 0, щоб не перегравати до вдалої спроби.
   const leave = () => {
-    if (!sent.current && game) submitDuelScore(duel.id, 0).catch(() => {});
+    if (!sent.current && (game || isNumber)) submitDuelScore(duel.id, 0).catch(() => {});
     sent.current = true;
     onClose();
   };
@@ -289,6 +331,8 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
             {status && <Text style={styles.mutedCenter}>{status}</Text>}
             <BigButton label="ДО ДРУЗІВ" onPress={onClose} />
           </Panel>
+        ) : isNumber ? (
+          <NumberDuel onDone={finish} />
         ) : !game ? (
           <Text style={styles.mutedCenter}>Цієї гри вже немає. Онови застосунок</Text>
         ) : game.kind === 'dig' ? (
@@ -303,6 +347,40 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
           </>
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+/** Один кидок числа від 1 до 99. */
+function NumberDuel({ onDone }: { onDone: (points: number) => void }) {
+  const [value, setValue] = useState<number | null>(null);
+  const [rolling, setRolling] = useState(false);
+  const roll = () => {
+    if (rolling || value !== null) return;
+    setRolling(true);
+    sfx('spin', 0.5);
+    const final = 1 + Math.floor(Math.random() * 99);
+    let k = 0;
+    const t = setInterval(() => {
+      k++;
+      setValue(1 + Math.floor(Math.random() * 99));
+      if (k >= 18) {
+        clearInterval(t);
+        setValue(final);
+        setRolling(false);
+        sfx(final >= 70 ? 'bigwin' : 'win');
+        haptic('win');
+        setTimeout(() => onDone(final), 900);
+      }
+    }, 80);
+  };
+  return (
+    <View style={styles.slot}>
+      <Text style={styles.mutedCenter}>Один кидок. У кого число більше, той забирає банк.</Text>
+      <Panel style={styles.numberBox}>
+        <Text style={styles.number}>{value ?? '?'}</Text>
+      </Panel>
+      <BigButton label={value === null ? 'КИНУТИ ЧИСЛО' : rolling ? '…' : `ТВОЄ ЧИСЛО: ${value}`} onPress={roll} disabled={rolling || value !== null} />
     </View>
   );
 }
@@ -430,6 +508,8 @@ const styles = StyleSheet.create({
   barTitle: { color: colors.text, fontSize: 16, fontWeight: '900', flex: 1 },
   result: { alignItems: 'center', gap: 10 },
   big: { fontSize: 48 },
+  numberBox: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: 28 },
+  number: { color: colors.gold, fontSize: 96, fontWeight: '900' },
   slot: { gap: 14, alignItems: 'center' },
   score: { alignItems: 'center', alignSelf: 'stretch' },
   scoreText: { color: colors.gold, fontSize: 24, fontWeight: '900' },

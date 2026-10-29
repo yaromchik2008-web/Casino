@@ -20,14 +20,17 @@ export function xpForLevel(level: number): number {
   return Math.round(1000 * Math.pow(level - 1, 1.9));
 }
 
+// Рівні від 1 до 100; назва змінюється кожні 10 рівнів.
+export const MAX_LEVEL = 100;
+
 export function levelFromXp(xp: number): number {
   let level = 1;
-  while (level < LEVELS.length && xp >= xpForLevel(level + 1)) level++;
+  while (level < MAX_LEVEL && xp >= xpForLevel(level + 1)) level++;
   return level;
 }
 
 export function levelName(level: number): string {
-  return LEVELS[Math.min(level, LEVELS.length) - 1];
+  return LEVELS[Math.min(LEVELS.length, Math.ceil(Math.min(level, MAX_LEVEL) / 10)) - 1];
 }
 
 export function levelReward(level: number): number {
@@ -42,16 +45,36 @@ export interface MissionDef {
   goal: number;
   reward: number;
   icon: string;
+  hard?: boolean;
 }
 
-export const MISSIONS: MissionDef[] = [
-  { id: 'bets', title: 'Зроби 30 ставок у будь-яких іграх', goal: 30, reward: 500, icon: '🎯' },
-  { id: 'slot', title: 'Зіграй 20 обертів у слотах', goal: 20, reward: 400, icon: '🎰' },
-  { id: 'table', title: 'Зіграй 5 настільних ігор', goal: 5, reward: 400, icon: '🃏' },
-  { id: 'fast', title: 'Зіграй 10 швидких ігор', goal: 10, reward: 400, icon: '⚡' },
-  { id: 'bigwin', title: 'Виграй 10 ₴+ за одну гру', goal: 1, reward: 1000, icon: '🏆' },
-  { id: 'variety', title: 'Спробуй 5 різних ігор', goal: 5, reward: 700, icon: '🧭' },
+// Вид спорту для важкого завдання дня змінюється щодня.
+export const DAILY_SPORTS: { id: string; label: string }[] = [
+  { id: 'football', label: 'футбол' },
+  { id: 'basketball', label: 'баскетбол' },
+  { id: 'tennis', label: 'теніс' },
+  { id: 'hockey', label: 'хокей' },
 ];
+
+export function sportOfDay(date = new Date()) {
+  const n = Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 86_400_000);
+  return DAILY_SPORTS[((n % DAILY_SPORTS.length) + DAILY_SPORTS.length) % DAILY_SPORTS.length];
+}
+
+// 5 легких завдань по 50 ₴ і 3 важких по 100 ₴.
+export function dailyMissions(date = new Date()): MissionDef[] {
+  const sport = sportOfDay(date);
+  return [
+    { id: 'bets', title: 'Зроби 20 ставок у будь-яких іграх', goal: 20, reward: 5000, icon: '🎯' },
+    { id: 'slot', title: 'Зіграй 15 обертів у слотах', goal: 15, reward: 5000, icon: '🎰' },
+    { id: 'table', title: 'Зіграй 3 настільні ігри', goal: 3, reward: 5000, icon: '🃏' },
+    { id: 'fast', title: 'Зіграй 5 швидких ігор', goal: 5, reward: 5000, icon: '⚡' },
+    { id: 'variety', title: 'Спробуй 3 різні ігри', goal: 3, reward: 5000, icon: '🧭' },
+    { id: 'sport', title: `Виграй 200 ₴ на ставках: ${sport.label}`, goal: 20000, reward: 10000, icon: '🏟️', hard: true },
+    { id: 'bigwin', title: 'Виграй 100 ₴+ за одну гру', goal: 1, reward: 10000, icon: '🏆', hard: true },
+    { id: 'grind', title: 'Зроби 150 ставок за день', goal: 150, reward: 10000, icon: '🔥', hard: true },
+  ];
+}
 
 export function dayId(date = new Date()): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;

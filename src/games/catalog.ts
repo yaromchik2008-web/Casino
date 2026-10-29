@@ -62,6 +62,9 @@ function video(emojis: string[], wild: string, scatter: string, payScale?: numbe
   return { reels: 5, symbols: videoSymbols(emojis, wild, scatter, payScale), wild: 'wild', scatter: 'scatter' };
 }
 
+// Виплати «Ковбасного раю»: 10 фриспінів замість 8, RTP ≈ 0.88 з ретригером (simKov.ts).
+const KOVBASA_PAY = 0.71;
+
 function reweight(cfg: SlotConfig, weights: number[]): SlotConfig {
   return { ...cfg, symbols: cfg.symbols.map((sym, i) => (i < weights.length ? { ...sym, weight: weights[i] } : sym)) };
 }
@@ -111,7 +114,33 @@ const CARS_ART: Record<string, ImageSourcePropType> = {
   cover: require('../../assets/cars/sprinter.png'),
 };
 
+// Ковбаси «Ковбасного раю» намальовані для Casino Victor (assets/kovbasa).
+const KOVBASA_ART: Record<string, ImageSourcePropType> = {
+  v0: require('../../assets/kovbasa/v0.png'),
+  v1: require('../../assets/kovbasa/v1.png'),
+  v2: require('../../assets/kovbasa/v2.png'),
+  v3: require('../../assets/kovbasa/v3.png'),
+  v4: require('../../assets/kovbasa/v4.png'),
+  v5: require('../../assets/kovbasa/v5.png'),
+  wild: require('../../assets/kovbasa/wild.png'),
+  scatter: require('../../assets/kovbasa/scatter.png'),
+  cover: require('../../assets/kovbasa/cover.png'),
+};
+
 export const GAMES: GameInfo[] = [
+  {
+    id: 'kovbasa',
+    music: 'classic',
+    title: 'Ковбасний рай',
+    emoji: '🌭',
+    colors: ['#E85D2C', '#3A0A04'],
+    kind: 'slot',
+    categories: ['new', 'popular', 'slots'],
+    tag: 'NEW',
+    slot: { ...video(['🌭', '🥓', '🍖', '⭕', '🥢', '🥨'], '🐷', '🍳', KOVBASA_PAY), freeSpins: 10 },
+    art: KOVBASA_ART,
+    description: 'Від сосиски до краківської. Порося-wild замінює всіх, 3+ сковорідки «БОНУС» дають 10 фриспінів, а бонуска в бонусці дає ще 10.',
+  },
   {
     id: 'avtobazar',
     music: 'classic',

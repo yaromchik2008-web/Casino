@@ -1,6 +1,6 @@
 // Майно за ігрові гривні. Суми в копійках. Назви загальні, без брендів.
 
-export type ItemCategory = 'car' | 'moto' | 'home' | 'business';
+export type ItemCategory = 'car' | 'home' | 'business';
 
 export interface ShopItem {
   id: string;
@@ -24,18 +24,17 @@ export const REMOVED_ITEMS: Record<string, number> = {
 
 export const SHOP_CATEGORIES: { id: ItemCategory; label: string; icon: string }[] = [
   { id: 'home', label: 'Житло', icon: '🏠' },
-  { id: 'car', label: 'Машини', icon: '🚗' },
-  { id: 'moto', label: 'Мотоцикли', icon: '🏍️' },
+  { id: 'car', label: 'Транспорт', icon: '🚗' },
   { id: 'business', label: 'Бізнес', icon: '🏢' },
 ];
 
 export const SHOP_ITEMS: ShopItem[] = [
 
-  { id: 'car-bike', title: 'Велосипед', emoji: '🚲', category: 'moto', price: 300 * UAH },
-  { id: 'car-scooter', title: 'Скутер', emoji: '🛵', category: 'moto', price: 1500 * UAH },
-  { id: 'moto-alpha', title: 'Мопед Альфа 110 кубів', emoji: '🛵', category: 'moto', price: 18000 * UAH },
-  { id: 'moto-prus', title: 'Прус', emoji: '🏍️', category: 'moto', price: 25000 * UAH },
-  { id: 'moto-forte', title: 'Forte 200 кубів', emoji: '🏍️', category: 'moto', price: 42000 * UAH },
+  { id: 'car-bike', title: 'Велосипед', emoji: '🚲', category: 'car', price: 300 * UAH },
+  { id: 'car-scooter', title: 'Скутер', emoji: '🛵', category: 'car', price: 1500 * UAH },
+  { id: 'moto-alpha', title: 'Мопед Альфа 110 кубів', emoji: '🛵', category: 'car', price: 18000 * UAH },
+  { id: 'moto-prus', title: 'Прус', emoji: '🏍️', category: 'car', price: 25000 * UAH },
+  { id: 'moto-forte', title: 'Forte 200 кубів', emoji: '🏍️', category: 'car', price: 42000 * UAH },
   { id: 'car-old', title: 'Вживана легківка', emoji: '🚗', category: 'car', price: 8000 * UAH },
   { id: 'car-vaz', title: 'ВАЗ 2107', emoji: '🚗', category: 'car', price: 35000 * UAH },
   { id: 'car-doblo', title: 'Fiat Doblo', emoji: '🚐', category: 'car', price: 220000 * UAH },
@@ -46,12 +45,12 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'prize-sprinter', title: 'Mercedes Sprinter 3.0', emoji: '🚐', category: 'car', price: 900000 * UAH, prize: true },
   { id: 'car-yacht', title: 'Яхта', emoji: '🛥️', category: 'car', price: 3000000 * UAH },
 
-  { id: 'home-room', title: 'Кімната в гуртожитку', emoji: '🛏️', category: 'home', price: 1000 * UAH },
-  { id: 'home-flat', title: 'Квартира', emoji: '🏢', category: 'home', price: 20000 * UAH },
-  { id: 'home-house', title: 'Будинок', emoji: '🏡', category: 'home', price: 80000 * UAH },
-  { id: 'home-pent', title: 'Пентхаус', emoji: '🌆', category: 'home', price: 250000 * UAH },
-  { id: 'home-villa', title: 'Вілла біля моря', emoji: '🏝️', category: 'home', price: 600000 * UAH },
-  { id: 'home-castle', title: 'Замок', emoji: '🏰', category: 'home', price: 2000000 * UAH },
+  { id: 'home-room', title: 'Кімната в гуртожитку', emoji: '🛏️', category: 'home', price: 1000 * UAH, income: 5 * UAH },
+  { id: 'home-flat', title: 'Квартира', emoji: '🏢', category: 'home', price: 20000 * UAH, income: 15 * UAH },
+  { id: 'home-house', title: 'Будинок', emoji: '🏡', category: 'home', price: 80000 * UAH, income: 50 * UAH },
+  { id: 'home-pent', title: 'Пентхаус', emoji: '🌆', category: 'home', price: 250000 * UAH, income: 200 * UAH },
+  { id: 'home-villa', title: 'Вілла біля моря', emoji: '🏝️', category: 'home', price: 600000 * UAH, income: 300 * UAH },
+  { id: 'home-castle', title: 'Замок', emoji: '🏰', category: 'home', price: 2000000 * UAH, income: 500 * UAH },
 
   { id: 'biz-coffee', title: 'Кавовий кіоск', emoji: '☕', category: 'business', price: 2000 * UAH, income: 10 * UAH },
   { id: 'biz-bakery', title: 'Пекарня', emoji: '🥐', category: 'business', price: 10000 * UAH, income: 45 * UAH },
@@ -60,6 +59,17 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'biz-it', title: 'Ковбасня', emoji: '🌭', category: 'business', price: 400000 * UAH, income: 1400 * UAH },
   { id: 'biz-factory', title: 'Майонезний завод', emoji: '🏭', category: 'business', price: 1200000 * UAH, income: 4000 * UAH },
 ];
+
+// Кожен куплений транспорт додає 1 % до виграшів в іграх.
+export const VEHICLE_BOOST = 0.01;
+
+export function vehicleCount(owned: string[]) {
+  return owned.filter((id) => findItem(id)?.category === 'car').length;
+}
+
+export function vehicleBoost(owned: string[]) {
+  return 1 + VEHICLE_BOOST * vehicleCount(owned);
+}
 
 export const SELL_RATE = 0.7;
 export const INCOME_CAP_HOURS = 24;

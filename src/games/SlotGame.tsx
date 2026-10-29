@@ -55,9 +55,11 @@ export function SlotGame({ game }: { game: GameInfo }) {
     }
     if (free) setFreeSpins((n) => n - 1);
     const karasFree = free && wheelBonus;
-    const lastFree = karasFree && freeSpins <= 1;
-    const result = spinGrid(config);
+    const result = spinGrid(config, Math.random, free);
     const outcome = evaluateGrid(config, result, bet);
+    // Ретригер: бонуска в бонусці додає ще один бонус (у фриспінах scatter випадає рідше).
+    const retrigger = free && outcome.freeSpins > 0;
+    const lastFree = karasFree && freeSpins <= 1 && !retrigger;
     setGrid(result);
     setHighlight([]);
     setSpinning(Array(config.reels).fill(true));
@@ -112,7 +114,13 @@ export function SlotGame({ game }: { game: GameInfo }) {
             celebrate({ kind: 'win', amount: outcome.win, bet });
           } else sfx('win');
         }
-        if (lastFree) {
+        if (retrigger) {
+          const extra = karasFree ? KARAS_FREE_SPINS : outcome.freeSpins;
+          setFreeSpins((n) => n + extra);
+          wallet.track('bonuses');
+          parts.push(`Ретригер! +${extra} фриспінів`);
+          celebrate({ kind: 'intro', emoji: '🔁', title: 'ЩЕ ОДНА БОНУСКА!', subtitle: `+${extra} фриспінів` });
+        } else if (lastFree) {
           parts.push('Банк іде в колесо фортуни!');
           setTimeout(() => setBonusBet(bet), 900);
         } else if (outcome.freeSpins > 0 && wheelBonus && !karasFree) {
@@ -123,7 +131,7 @@ export function SlotGame({ game }: { game: GameInfo }) {
           setFreeSpins(KARAS_FREE_SPINS);
           parts.push(`${KARAS_FREE_SPINS} фриспінів!`);
           celebrate({ kind: 'intro', emoji: '🐟', title: `${KARAS_FREE_SPINS} ФРИСПІНІВ!`, subtitle: 'Увесь виграш піде в колесо фортуни і помножиться' });
-        } else if (outcome.freeSpins > 0 && !wheelBonus) {
+        } else if (outcome.freeSpins > 0 && !wheelBonus && !free) {
           setFreeSpins((n) => n + outcome.freeSpins);
           setAuto(0);
           wallet.track('bonuses');
@@ -235,8 +243,8 @@ function Paytable({ config, art, wheel }: { config: SlotConfig; art?: GameInfo['
           <Text style={styles.payText}>
             {s.id === config.scatter
               ? wheel
-                ? '3/4/5 будь-де: ×5/×20/×100 ставки + 5 фриспінів, виграш яких Колесо фортуни множить до ×100 (або Mercedes Sprinter 3.0)'
-                : '3/4/5 будь-де: ×5/×20/×100 ставки + фриспіни'
+                ? '3/4/5 будь-де: ×5/×20/×100 ставки + 5 фриспінів, виграш яких Колесо фортуни множить до ×100 (або Mercedes Sprinter 3.0). Бонуска у фриспінах дає ще +5'
+                : `3/4/5 будь-де: ×5/×20/×100 ставки + ${config.freeSpins ?? 8} фриспінів. Бонуска в бонусці дає ще (у фриспінах трохи рідше)`
               : s.id === config.wild
                 ? `Wild: замінює символи · ${s.pays.map((p) => `×${p}`).join(' / ')}`
                 : s.id === config.jackpotSymbol

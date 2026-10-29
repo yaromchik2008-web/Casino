@@ -23,23 +23,21 @@ import {
 import { telegramName } from '../telegram';
 import { PlayerProfile } from './PlayerProfile';
 import { formatDuration, useNow } from '../components/useNow';
-import { TOURNAMENT_PRIZES, leaderboard, weekEndsAt, weekId, weekProgress } from '../state/progress';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 
-type View3 = 'six' | 'leaders' | 'week';
+type View3 = 'six' | 'leaders';
 
 export function TournamentsScreen() {
-  const [view, setView] = useState<View3>(friendsEnabled() ? 'six' : 'week');
+  const [view, setView] = useState<View3>('six');
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>🏆 Турніри</Text>
       <View style={styles.tabs}>
         <Chip label="⏱️ 6 годин" active={view === 'six'} onPress={() => setView('six')} />
         <Chip label="📊 Лідери" active={view === 'leaders'} onPress={() => setView('leaders')} />
-        <Chip label="🗓️ Тижневий" active={view === 'week'} onPress={() => setView('week')} />
       </View>
-      {view === 'six' ? <SixHours /> : view === 'leaders' ? <Leaders /> : <Weekly />}
+      {view === 'six' ? <SixHours /> : <Leaders />}
     </ScrollView>
   );
 }
@@ -201,55 +199,6 @@ function Leaders() {
   );
 }
 
-function Weekly() {
-  const { state } = useWallet();
-  const now = useNow();
-  const week = weekId(new Date(now));
-  const points = state.tournamentWeek === week ? state.tournamentPoints : 0;
-  const rows = leaderboard(week, points, weekProgress(new Date(now)));
-  const myPlace = rows.findIndex((r) => r.me) + 1;
-  const pool = TOURNAMENT_PRIZES.reduce((a, b) => a + b, 0);
-
-  return (
-    <>
-      <LinearGradient colors={['#0EA5E9', '#4C1D95']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <Text style={styles.heroTitle}>Тижневий турнір «Зоряний марафон»</Text>
-        <Text style={styles.heroPool}>{formatCoins(pool)}</Text>
-        <Text style={styles.heroSub}>Очки = монети, виграні в будь-якій грі цього тижня</Text>
-        <Text style={styles.heroTimer}>До кінця: {formatDuration(weekEndsAt(new Date(now)) - now)}</Text>
-      </LinearGradient>
-
-      <Panel style={styles.me}>
-        <Text style={styles.meText}>Твоє місце: {points > 0 ? `#${myPlace}` : '—'}</Text>
-        <Text style={styles.meText}>Очки: {formatCoins(points)}</Text>
-        {points > 0 && myPlace <= TOURNAMENT_PRIZES.length && (
-          <Text style={styles.mePrize}>Зараз ти отримуєш {formatCoins(TOURNAMENT_PRIZES[myPlace - 1])}</Text>
-        )}
-      </Panel>
-
-      <Panel style={styles.board}>
-        <Text style={styles.boardTitle}>Таблиця лідерів</Text>
-        {rows.slice(0, 15).map((r, i) => (
-          <View key={r.name} style={[styles.row, r.me && styles.rowMe]}>
-            <Text style={styles.place}>{i < 3 ? ['🥇', '🥈', '🥉'][i] : `${i + 1}`}</Text>
-            <Text style={[styles.name, r.me && styles.nameMe]}>{r.name}</Text>
-            <Text style={styles.points}>{formatCoins(r.points)}</Text>
-            <Text style={styles.prize}>{TOURNAMENT_PRIZES[i] ? `+${formatCoins(TOURNAMENT_PRIZES[i])}` : ''}</Text>
-          </View>
-        ))}
-        {myPlace > 15 && (
-          <View style={[styles.row, styles.rowMe]}>
-            <Text style={styles.place}>{myPlace}</Text>
-            <Text style={[styles.name, styles.nameMe]}>Ти</Text>
-            <Text style={styles.points}>{formatCoins(points)}</Text>
-            <Text style={styles.prize} />
-          </View>
-        )}
-      </Panel>
-      <Text style={styles.note}>Приз нараховується автоматично на початку наступного тижня. Суперники в таблиці віртуальні.</Text>
-    </>
-  );
-}
 
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32, gap: 14 },

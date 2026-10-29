@@ -4,12 +4,15 @@ import { sfx } from '../audio/sound';
 import { BetSelector, BigButton, Chip, ResultLine, haptic } from '../components/ui';
 import { friendsEnabled } from '../config';
 import {
+  Duel,
   DurakLobbyRow,
   DurakTable,
   claimTransfers,
   durakCancel,
   durakClaim,
+  durakByDuel,
   durakCreate,
+  durakDuelStart,
   durakGet,
   durakJoin,
   durakLobby,
@@ -267,7 +270,8 @@ function OfflineDurak({ game }: { game: GameInfo }) {
   );
 }
 
-function OnlineDurak({ game }: { game: GameInfo }) {
+/** Онлайн-дурак. З duel — гра дуелі з другом за вже знятими ставками. */
+export function OnlineDurak({ game, duel, onClose }: { game: GameInfo; duel?: Duel; onClose?: () => void }) {
   const wallet = useWallet();
   const [deck, setDeck] = useState<DeckSize>(36);
   const [bet, setBet] = useState(500);
@@ -278,6 +282,8 @@ function OnlineDurak({ game }: { game: GameInfo }) {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const sending = useRef(false);
+  const tableRef = useRef<DurakTable | null>(null);
+  tableRef.current = table;
   const me = myProfile();
 
   const collect = useCallback(async () => {
@@ -292,9 +298,36 @@ function OnlineDurak({ game }: { game: GameInfo }) {
     return 0;
   }, [wallet]);
 
+  // Стіл дуелі: суперник, що прийняв виклик, роздає карти; той, хто викликав, чекає стіл.
+  const duelId = duel?.id;
+  useEffect(() => {
+    if (!me || !duelId || !duel) return;
+    let alive = true;
+    const find = async () => {
+      let t = await durakByDuel(duelId);
+      if (!t && duel.opponent === me.id) {
+        const s = newGame(36);
+        await durakDuelStart(duelId, s, turnOf(s) ?? 0).catch(() => {});
+        t = await durakByDuel(duelId);
+      }
+      if (alive && t) setTable(t);
+      return !!t;
+    };
+    find().catch((e) => alive && setMsg({ text: friendlyError(e), tone: 'lose' }));
+    const iv = setInterval(() => {
+      if (tableRef.current) return clearInterval(iv);
+      find().catch(() => {});
+    }, 2000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, duelId]);
+
   // Повертаємось до гри, якщо вона вже йде.
   useEffect(() => {
-    if (!me) return;
+    if (!me || duelId) return;
     durakMine()
       .then((t) => t && setTable(t))
       .catch((e) => setMsg({ text: friendlyError(e), tone: 'lose' }));
@@ -302,7 +335,7 @@ function OnlineDurak({ game }: { game: GameInfo }) {
 
   // Лобі, поки не сидимо за столом.
   useEffect(() => {
-    if (!me || table) return;
+    if (!me || table || duelId) return;
     let alive = true;
     const load = () =>
       durakLobby()
@@ -314,7 +347,7 @@ function OnlineDurak({ game }: { game: GameInfo }) {
       alive = false;
       clearInterval(t);
     };
-  }, [me, table]);
+  }, [me, table, duelId]);
 
   // Стан столу, поки гра не закінчилась.
   const tableId = table?.id;
@@ -478,6 +511,18 @@ function OnlineDurak({ game }: { game: GameInfo }) {
     );
   }
 
+  if (duelId && !table) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.waiting}>
+          <Text style={styles.waitTitle}>🃏 Роздаємо карти…</Text>
+          <Text style={styles.note}>Дуель у дурака на 36 карт. Ставки вже на столі, переможець забирає обидві.</Text>
+        </View>
+        {msg && <ResultLine text={msg.text} tone={msg.tone} />}
+      </View>
+    );
+  }
+
   if (table && table.state) {
     const s = table.state as DurakState;
     const over = table.status !== 'playing';
@@ -494,8 +539,9 @@ function OnlineDurak({ game }: { game: GameInfo }) {
         )}
         {over ? (
           <BigButton
-            label="ДО СТОЛІВ"
+            label={onClose ? 'ГОТОВО' : 'ДО СТОЛІВ'}
             onPress={() => {
+              if (onClose) return onClose();
               setTable(null);
               setMsg(null);
             }}

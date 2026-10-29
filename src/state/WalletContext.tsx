@@ -3,20 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   GameGroup,
-  MISSIONS,
-  TOURNAMENT_PRIZES,
+  dailyMissions,
   dayId,
-  leaderboard,
   levelFromXp,
   levelName,
   levelReward,
+  sportOfDay,
   weekId,
   XP_PER_KOPECKS,
 } from './progress';
 import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
-import { INCOME_CAP_HOURS, REMOVED_ITEMS, findItem, hourlyIncome, sellPrice } from './shop';
-import { SportBet, SportPick, betResult } from './sports';
+import { INCOME_CAP_HOURS, REMOVED_ITEMS, findItem, hourlyIncome, sellPrice, vehicleBoost } from './shop';
+import { SportBet, SportPick, betResult, getMatch } from './sports';
 import { tourneyRound } from './friends';
 import { PICKAXES } from '../games/mineEngine';
 import { findGame } from '../games/catalog';
@@ -26,13 +25,14 @@ const SLOT_KINDS = ['slot', 'tumble', 'holdwin', 'dig'];
 export function winBoost(gameId: string) {
   const g = findGame(gameId);
   if (!g) return 1;
-  return SLOT_KINDS.includes(g.kind) ? 1.14 : 1.06;
+  // Слоти ×1.18: ретригер з рідшим scatter у фриспінах забрав ≈ 4 % RTP, тож бонус трохи більший.
+  return g.kind === 'slot' ? 1.18 : SLOT_KINDS.includes(g.kind) ? 1.14 : 1.06;
 }
 
 const KEY = 'freecasino:player:v3';
 
 export const START_BALANCE = 50000; // усі суми в копійках: 50000 = 500,00 ₴
-export const HOURLY_BONUS = 500;
+export const HOURLY_BONUS = 2000;
 export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
@@ -123,19 +123,10 @@ function rollPeriods(s: PlayerState, notes: string[]): PlayerState {
   if (next.missionDay !== today) {
     next = { ...next, missionDay: today, missionProgress: {}, missionPlayed: [], missionClaimed: [] };
   }
+  // Тижневий турнір прибрали (за бажанням ghj), лише скидаємо старі очки.
   const week = weekId();
-  if (next.tournamentWeek !== week) {
-    const rows = leaderboard(next.tournamentWeek, next.tournamentPoints, 1);
-    const place = rows.findIndex((r) => r.me);
-    const prize = next.tournamentPoints > 0 ? TOURNAMENT_PRIZES[place] ?? 0 : 0;
-    if (prize > 0) notes.push(`Турнір завершено: ${place + 1} місце, приз ${formatCoins(prize)}`);
-    next = {
-      ...next,
-      balance: next.balance + prize,
-      tournamentWeek: week,
-      tournamentPoints: 0,
-    };
-  }
+  if (next.tournamentWeek !== week) next = { ...next, tournamentWeek: week, tournamentPoints: 0 };
+  void notes;
   return next;
 }
 
@@ -235,6 +226,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       commit((s) => {
         const progress = { ...s.missionProgress };
         progress.bets = (progress.bets ?? 0) + 1;
+        progress.grind = (progress.grind ?? 0) + 1;
         progress[group] = (progress[group] ?? 0) + 1;
         const missionPlayed = s.missionPlayed.includes(gameId) ? s.missionPlayed : [...s.missionPlayed, gameId];
         progress.variety = missionPlayed.length;
@@ -261,7 +253,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     (gameId: string, amount: number) => {
       if (amount <= 0) return;
       // Бонус удачі (за бажанням ghj): гравець у середньому виходить у невеликий плюс.
-      const rounded = Math.round(amount * winBoost(gameId));
+      // Плюс 1 % за кожен куплений транспорт.
+      const rounded = Math.round(amount * winBoost(gameId) * vehicleBoost(stateRef.current.owned));
       commit((s) => ({
         ...s,
         balance: s.balance + rounded,
@@ -271,7 +264,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         tournamentPoints: s.tournamentPoints + rounded,
         tourney: s.tourney && s.tourney.round === tourneyRound() ? { ...s.tourney, net: s.tourney.net + rounded } : s.tourney,
         missionProgress:
-          rounded >= 1000 ? { ...s.missionProgress, bigwin: 1 } : s.missionProgress,
+          rounded >= 10000 ? { ...s.missionProgress, bigwin: 1 } : s.missionProgress,
       }));
     },
     [commit],
@@ -313,7 +306,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const claimMission = useCallback(
     (id: string) => {
-      const mission = MISSIONS.find((m) => m.id === id);
+      const mission = dailyMissions().find((m) => m.id === id);
       const s = stateRef.current;
       if (!mission || s.missionClaimed.includes(id) || (s.missionProgress[id] ?? 0) < mission.goal) return 0;
       commit((p) => ({ ...p, balance: p.balance + mission.reward, missionClaimed: [...p.missionClaimed, id] }));
@@ -481,6 +474,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!s.sportBets.some((b) => b.status === 'open' && betResult(b) !== 'open')) return;
       let won = 0;
       let wins = 0;
+      let sportWon = 0;
+      const daySport = sportOfDay().id;
       commit((p) => ({
         ...p,
         sportBets: p.sportBets.map((b) => {
@@ -490,6 +485,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const payout = r === 'won' ? Math.floor(b.stake * b.odds) : 0;
           won += payout;
           if (payout) wins++;
+          if (payout && b.picks.every((pk) => getMatch(pk.matchId).sport === daySport)) sportWon += payout;
           return { ...b, status: r, payout };
         }),
       }));
@@ -500,6 +496,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           totalWon: p.totalWon + won,
           biggestWin: Math.max(p.biggestWin, won),
           stats: { ...p.stats, sportWins: (p.stats.sportWins ?? 0) + wins },
+          missionProgress: sportWon ? { ...p.missionProgress, sport: (p.missionProgress.sport ?? 0) + sportWon } : p.missionProgress,
         }));
         notify(`⚽ Ставка зіграла: +${formatCoins(won)}`);
       } else notify('Ставка на спорт не зіграла');

@@ -120,6 +120,8 @@ export function friendlyError(e: unknown): string {
     return 'На сервері ще не запущено SQL з docs/supabase-v5.sql';
   if (/tourney|leaderboard|settle|rank/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
     return 'На сервері ще не запущено SQL з docs/supabase-v3.sql';
+  if (msg.includes('duel_id') || msg.includes('durak_duel'))
+    return 'На сервері ще не запущено SQL з docs/supabase-v11.sql';
   if (msg.includes('durak') && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
     return 'На сервері ще не запущено SQL з docs/supabase-v10.sql';
   if (msg.includes('duel') && (msg.includes('schema cache') || msg.includes('does not exist')))
@@ -486,4 +488,16 @@ export async function durakClaim(id: number) {
 export async function profileName(id: string): Promise<string | null> {
   const { data } = await db().from('profiles').select('name').eq('id', id).maybeSingle();
   return (data?.name as string) ?? null;
+}
+
+/** Стіл дурака для дуелі (docs/supabase-v11.sql). */
+export async function durakByDuel(duelId: number): Promise<DurakTable | null> {
+  const { data, error } = await db().from('durak_tables').select('*').eq('duel_id', duelId).maybeSingle();
+  if (error) throw error;
+  return data as DurakTable | null;
+}
+
+export async function durakDuelStart(duelId: number, state: unknown, turn: number) {
+  const { error } = await db().rpc('durak_duel_start', { p_duel: duelId, p_state: state, p_turn: turn });
+  if (error) throw error;
 }
