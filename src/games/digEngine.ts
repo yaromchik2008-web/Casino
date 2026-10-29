@@ -256,7 +256,8 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
   const explode = (i: number) => {
     const row = Math.floor(i / COLS);
     const col = i % COLS;
-    const hit: number[] = [];
+    // Сам динаміт теж зникає (його вже позначено зламаним, тож у циклі нижче він пропускається).
+    const hit: number[] = [i];
     const paid: [number, number][] = [];
     let v = 0;
     ensure(row + 3);
