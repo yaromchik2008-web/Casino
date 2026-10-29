@@ -1,6 +1,7 @@
 import { ComponentRef, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getSettings, sfx } from '../audio/sound';
+import { Ctx, FONT, GameCanvas, WEB, imageOf, label, roundRect } from '../components/canvasKit';
 import { BetSelector, BigButton, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
@@ -85,8 +86,18 @@ export function ChickenGame({ game }: { game: GameInfo }) {
   const cashValue = Math.floor(bet * mult(lane));
 
   useEffect(() => {
-    scroll.current?.scrollTo({ x: Math.max(0, SIDE_W + (lane - 2) * LANE_W), animated: true });
+    if (!WEB) scroll.current?.scrollTo({ x: Math.max(0, SIDE_W + (lane - 2) * LANE_W), animated: true });
   }, [lane]);
+  // Веб: дорога на канвасі; тут лише стан анімацій (стрибок курки, наїзд машини, камера).
+  const [roadW, setRoadW] = useState(360);
+  const anim = useRef({ from: 0, to: 0, at: 0, cam: 0, crashAt: 0 });
+  const prevLane = useRef(0);
+  if (prevLane.current !== lane) {
+    anim.current = { ...anim.current, from: prevLane.current, to: lane, at: performance.now() };
+    prevLane.current = lane;
+  }
+  if (crash != null && !anim.current.crashAt) anim.current.crashAt = performance.now();
+  if (crash == null) anim.current.crashAt = 0;
 
   const start = () => {
     if (!wallet.bet(game.id, 'fast', bet)) return setMessage({ text: 'Недостатньо коштів', tone: 'lose' });
@@ -131,7 +142,14 @@ export function ChickenGame({ game }: { game: GameInfo }) {
 
   return (
     <View style={styles.root}>
-      <View style={styles.roadWrap}>
+      <View style={styles.roadWrap} onLayout={(e: LayoutChangeEvent) => setRoadW(Math.floor(e.nativeEvent.layout.width))}>
+        {WEB ? (
+          <GameCanvas
+            width={roadW}
+            height={ROAD_H}
+            draw={(ctx, now) => drawRoad(ctx, now, roadW, { lane, crash, active, lanes: cfg.lanes, level, mult }, anim.current)}
+          />
+        ) : (
         <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ height: ROAD_H }}>
           <View style={styles.side}>
             {[0, 1, 2, 3].map((k) => (
@@ -170,6 +188,7 @@ export function ChickenGame({ game }: { game: GameInfo }) {
             <Text style={styles.finishText}>🏁{'\n'}ФІНІШ</Text>
           </View>
         </ScrollView>
+        )}
         {banner && (
           <View pointerEvents="none" style={[styles.banner, banner.win ? styles.bannerWin : styles.bannerLose]}>
             <Text style={styles.bannerTitle}>{banner.title}</Text>
@@ -213,6 +232,120 @@ export function ChickenGame({ game }: { game: GameInfo }) {
       )}
     </View>
   );
+}
+
+const HOP_MS = 260;
+
+/** Дорога: камера їде за куркою, машини мчать по смугах попереду, курка стрибає дугою. */
+function drawRoad(
+  ctx: Ctx,
+  now: number,
+  W: number,
+  g: { lane: number; crash: number | null; active: boolean; lanes: number; level: number; mult: (k: number) => number },
+  a: { from: number; to: number; at: number; cam: number; crashAt: number },
+) {
+  const lite = getSettings().lite;
+  const hop = Math.min(1, (now - a.at) / HOP_MS);
+  const pos = a.from + (a.to - a.from) * hop; // дробова смуга курки
+  const laneX = (k: number) => SIDE_W + 10 + (k - 1) * LANE_W; // ліва межа смуги k (1..lanes)
+  const chickenX = (k: number) => (k <= 0 ? SIDE_W / 2 + 10 : laneX(k) + LANE_W / 2);
+  const cxNow = chickenX(Math.floor(pos)) + (chickenX(Math.ceil(pos)) - chickenX(Math.floor(pos))) * (pos - Math.floor(pos));
+  const worldW = SIDE_W + 10 + g.lanes * LANE_W + SIDE_W;
+  const target = Math.max(0, Math.min(worldW - W, cxNow - W * 0.35));
+  a.cam += (target - a.cam) * 0.15;
+  if (Math.abs(target - a.cam) < 0.5) a.cam = target;
+  const cam = a.cam;
+  ctx.save();
+  ctx.translate(-Math.round(cam), 0);
+  // Узбіччя з кущами.
+  ctx.fillStyle = '#86C45A';
+  ctx.fillRect(0, 0, SIDE_W, ROAD_H);
+  const bush = imageOf(ART.bush);
+  if (bush) for (let k = 0; k < 4; k++) ctx.drawImage(bush, 4, k * 78 - 10, 70, 70);
+  ctx.fillStyle = '#E5D3A6';
+  ctx.fillRect(SIDE_W, 0, 10, ROAD_H);
+  const first = Math.max(1, Math.floor((cam - SIDE_W) / LANE_W));
+  const last = Math.min(g.lanes, Math.ceil((cam + W - SIDE_W) / LANE_W) + 1);
+  const hole = imageOf(ART.manhole);
+  const gold = imageOf(ART.gold);
+  const barrier = imageOf(ART.barrier);
+  for (let n = first; n <= last; n++) {
+    const x = laneX(n);
+    ctx.fillStyle = '#6B7280';
+    ctx.fillRect(x, 0, LANE_W, ROAD_H);
+    ctx.fillStyle = '#F3F4F6';
+    for (let d = 0; d < 7; d++) {
+      roundRect(ctx, x + LANE_W - 2, d * 46 + 6, 4, 24, 2);
+      ctx.fill();
+    }
+    const here = g.lane === n;
+    const passed = n < g.lane || (here && g.crash == null);
+    const hx = x + (LANE_W - 68) / 2;
+    const hy = ROAD_H / 2 - 34;
+    const im = passed ? gold : hole;
+    if (im) ctx.drawImage(im, hx, hy, 68, 68);
+    if (!here) {
+      const m = g.mult(n);
+      const txt = m >= 1000 ? `×${Math.round(m / 100) / 10}k` : `×${m}`;
+      label(ctx, txt, x + LANE_W / 2, ROAD_H / 2, 14, passed ? '#7C2D12' : '#FFFFFF', 900, passed ? '' : 'rgba(0,0,0,0.7)');
+    }
+    if (passed && !here && barrier) ctx.drawImage(barrier, x + (LANE_W - 70) / 2, 30, 70, 56);
+    // Машини мчать по смугах попереду (на айфоні в легкому режимі їх немає).
+    if (g.active && !lite && n > g.lane && n <= g.lane + 4) {
+      const seed = n * 7 + g.level;
+      const period = 1300 + ((seed * 331) % 900) + 400 + ((seed * 677) % 1800);
+      const ph = ((now + seed * 137) % period) / period;
+      const drive = (1300 + ((seed * 331) % 900)) / period;
+      if (ph < drive) {
+        const y = -CAR_H - 10 + (ROAD_H + CAR_H + 20) * (ph / drive);
+        const car = imageOf(ART.cars[seed % ART.cars.length]);
+        if (car) {
+          ctx.save();
+          ctx.translate(x + LANE_W / 2, y + CAR_H / 2);
+          ctx.rotate(Math.PI);
+          ctx.drawImage(car, -CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
+          ctx.restore();
+        }
+      }
+    }
+  }
+  // Фініш.
+  const fx = laneX(g.lanes + 1);
+  ctx.fillStyle = '#3F6212';
+  ctx.fillRect(fx, 0, SIDE_W, ROAD_H);
+  label(ctx, '🏁 ФІНІШ', fx + SIDE_W / 2, ROAD_H / 2, 15, '#FFFFFF', 900, '');
+  // Машина, що збила курку, налітає зверху.
+  let carBusy = false;
+  if (g.crash != null && a.crashAt) {
+    const t = Math.min(1, (now - a.crashAt) / 220);
+    carBusy = t < 1;
+    const car = imageOf(ART.cars[g.crash % 4]);
+    const x = laneX(g.crash) + (LANE_W - CAR_W) / 2;
+    const y = -CAR_H + (ROAD_H / 2 - 10) * t;
+    if (car) {
+      ctx.save();
+      ctx.translate(x + CAR_W / 2, y + CAR_H / 2);
+      ctx.rotate(Math.PI);
+      ctx.drawImage(car, -CAR_W / 2, -CAR_H / 2, CAR_W, CAR_H);
+      ctx.restore();
+    }
+  }
+  // Курка стрибає дугою на наступну смугу.
+  const chick = imageOf(g.crash != null && hop >= 1 ? ART.hit : ART.chicken);
+  const jump = Math.sin(hop * Math.PI) * 26;
+  if (chick) ctx.drawImage(chick, cxNow - 40, ROAD_H / 2 - 60 - jump, 80, 80);
+  if (g.crash == null && g.lane > 0 && hop >= 1) {
+    const txt = `×${g.mult(g.lane)}`;
+    ctx.font = `900 13px ${FONT}`;
+    const w = ctx.measureText(txt).width + 20;
+    ctx.fillStyle = '#2563EB';
+    roundRect(ctx, cxNow - w / 2, ROAD_H / 2 + 26, w, 22, 10);
+    ctx.fill();
+    label(ctx, txt, cxNow, ROAD_H / 2 + 37, 13, '#FFFFFF', 900, '');
+  }
+  ctx.restore();
+  const waiting = !hole || !gold || !chick;
+  return waiting || hop < 1 || carBusy || Math.abs(target - a.cam) > 0.5 || (g.active && !lite);
 }
 
 const styles = StyleSheet.create({
