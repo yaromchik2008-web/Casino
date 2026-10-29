@@ -57,6 +57,7 @@ export function useSettings() {
 }
 
 export function initSound() {
+  preloadSfx();
   setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
   AsyncStorage.getItem(KEY)
     .then((raw) => {
@@ -118,8 +119,73 @@ export function resumeMusic() {
 const pools: Partial<Record<SfxId, { players: AudioPlayer[]; next: number }>> = {};
 const POOL_SIZE = 3;
 
+// ───────────── Веб: короткі звуки через Web Audio ─────────────
+// HTML <audio> на айфоні гальмує головний потік на кожному play/seek, тож на вебі звуки декодуємо один раз
+// і граємо з буфера; це не блокує анімацію.
+type WebCtx = AudioContext;
+let webCtx: WebCtx | null = null;
+const buffers: Partial<Record<SfxId, AudioBuffer | 'loading' | 'failed'>> = {};
+
+function audioCtx(): WebCtx | null {
+  if (webCtx) return webCtx;
+  const g = globalThis as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+  const C = g.AudioContext ?? g.webkitAudioContext;
+  if (!C) return null;
+  webCtx = new C();
+  // Браузер дозволяє звук лише після дотику, тож будимо контекст на першому ж дотику.
+  const wake = () => {
+    if (webCtx && webCtx.state !== 'running') webCtx.resume().catch(() => {});
+  };
+  if (typeof document !== 'undefined') {
+    document.addEventListener('touchstart', wake, { passive: true });
+    document.addEventListener('pointerdown', wake, { passive: true });
+  }
+  return webCtx;
+}
+
+function assetUri(m: unknown): string {
+  if (typeof m === 'string') return m;
+  const o = m as { uri?: string; default?: string } | null;
+  return o?.uri ?? o?.default ?? '';
+}
+
+function loadBuffer(ctx: WebCtx, id: SfxId) {
+  buffers[id] = 'loading';
+  fetch(assetUri(SFX[id]))
+    .then((r) => r.arrayBuffer())
+    .then((data) => new Promise<AudioBuffer>((ok, fail) => ctx.decodeAudioData(data, ok, fail)))
+    .then((b) => (buffers[id] = b))
+    .catch(() => (buffers[id] = 'failed'));
+}
+
+/** Завантажує всі короткі звуки наперед, щоб перший удар не чекав на мережу. */
+export function preloadSfx() {
+  if (Platform.OS !== 'web') return;
+  const ctx = audioCtx();
+  if (!ctx) return;
+  for (const id of Object.keys(SFX) as SfxId[]) if (!buffers[id]) loadBuffer(ctx, id);
+}
+
+function webSfx(id: SfxId, volume: number): boolean {
+  const ctx = audioCtx();
+  if (!ctx) return false;
+  const b = buffers[id];
+  if (b === 'failed') return false;
+  if (!b) loadBuffer(ctx, id);
+  if (!b || b === 'loading') return true; // ще вантажиться: краще пропустити звук, ніж гальмувати
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
+  const src = ctx.createBufferSource();
+  src.buffer = b;
+  const gain = ctx.createGain();
+  gain.gain.value = volume;
+  src.connect(gain).connect(ctx.destination);
+  src.start();
+  return true;
+}
+
 export function sfx(id: SfxId, volume = 0.8) {
   if (!settings.sfx) return;
+  if (Platform.OS === 'web' && webSfx(id, volume)) return;
   safe(() => {
     let pool = pools[id];
     if (!pool) {

@@ -300,7 +300,8 @@ export function MineGame({
   const wallet = useWallet();
   const { width, height } = useWindowDimensions();
   const [bet, setBet] = useState(100);
-  const [phase, setPhase] = useState<'idle' | 'roll' | 'run'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'roll' | 'run' | 'done'>('idle');
+  const [summary, setSummary] = useState<{ stake: number; won: number; bottom: boolean } | null>(null);
   const [blocks, setBlocks] = useState<Block[] | null>(null);
   const [tier, setTier] = useState(0);
   const [pickHp, setPickHp] = useState(0);
@@ -362,6 +363,13 @@ export function MineGame({
       setMessage({ text: `${bottom ? 'Пробився до дна! ' : ''}Заїзд завершено: +${formatCoins(won)}`, tone: 'win' });
     } else setMessage({ text: 'Кирка зламалась. Спробуй ще!', tone: 'lose' });
     if (!play.current.alive) return;
+    // Підсумок висить над шахтою, поки гравець не торкнеться.
+    setSummary({ stake, won, bottom });
+    setPhase('done');
+  };
+
+  const closeSummary = () => {
+    setSummary(null);
     setPhase('idle');
     setBlocks(null);
   };
@@ -382,6 +390,9 @@ export function MineGame({
     let ctx: CanvasRenderingContext2D | null = null;
     let lastT = Date.now();
     let hpNow = pick.hp;
+    let lastUi = 0;
+    let uiDirty = false;
+    let pendingMsg: { text: string; tone: 'win' } | null = null;
     const paint = (fx: number, fy: number, deg: number, cy: number) => {
       const cv = canvasRef.current;
       if (!cv) return;
@@ -431,7 +442,6 @@ export function MineGame({
         value += h.value;
         changed = true;
         hpNow = h.pickHp;
-        setPickHp(h.pickHp);
         if (WEB && !play.current.skip) burst(parts, cur, h.broken);
         if (!WEB) setShakes((s) => ({ ...s, [h.index]: (s[h.index] ?? 0) + 1 }));
         if (play.current.skip) continue;
@@ -448,7 +458,7 @@ export function MineGame({
         if (found.some((b) => b.type === 'diamond')) wallet.track('diamonds', found.filter((b) => b.type === 'diamond').length);
         if (found.length) {
           const best = found.sort((a, b) => blockValue(b) - blockValue(a))[0];
-          setMessage({ text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${h.exploded ? ' (вибух!)' : ''} +${show(h.value * stake)}`, tone: 'win' });
+          pendingMsg = { text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${h.exploded ? ' (вибух!)' : ''} +${show(h.value * stake)}`, tone: 'win' };
           sfx('coin', 0.6);
         }
       }
@@ -456,8 +466,18 @@ export function MineGame({
       if (changed) {
         // На вебі шахту малює Canvas, тож React-дерево блоків не чіпаємо.
         if (!WEB) setBlocks(cur);
-        setRunValue(value);
         onProgress?.(Math.round(value * stake));
+      }
+      // Панель з HP і знайденим оновлюємо не частіше 4 разів на секунду: кожне оновлення перемальовує екран.
+      const now = Date.now();
+      if (changed) uiDirty = true;
+      if (uiDirty && (now - lastUi > 250 || f >= total - 1)) {
+        uiDirty = false;
+        lastUi = now;
+        setPickHp(hpNow);
+        setRunValue(value);
+        if (pendingMsg) setMessage(pendingMsg);
+        pendingMsg = null;
       }
       if (f >= total - 1) {
         if (r.bottom) onProgress?.(Math.round(r.value * stake));
@@ -499,7 +519,7 @@ export function MineGame({
       </Panel>
       <ResultLine text={message.text} tone={message.tone} />
       {phase === 'roll' && <PickRoulette tier={tier} onDone={run} />}
-      {blocks && phase === 'run' ? (
+      {blocks && (phase === 'run' || phase === 'done') ? (
         <View style={styles.mine}>
           <View style={[styles.window, { width: size * MINE_COLS, height: viewH }]}>
           {WEB ? (
@@ -530,10 +550,34 @@ export function MineGame({
           </View>
           </Animated.View>
           )}
+          {phase === 'done' && summary && (
+            <Pressable style={styles.sumWrap} onPress={closeSummary} testID="mine-summary">
+              <View style={styles.sumCard}>
+                <Text style={styles.sumTitle}>{summary.won > 0 ? (summary.bottom ? '⛏️ Пробився до дна!' : '⛏️ Заїзд завершено') : '💥 Кирка зламалась'}</Text>
+                <View style={styles.sumRow}>
+                  <Text style={styles.sumLabel}>Ставка</Text>
+                  <Text style={styles.sumValue}>{formatCoins(summary.stake)}</Text>
+                </View>
+                <View style={styles.sumRow}>
+                  <Text style={styles.sumLabel}>Виграш</Text>
+                  <Text style={[styles.sumValue, { color: summary.won > 0 ? colors.gold : colors.muted }]}>
+                    {summary.won > 0 ? `+${formatCoins(summary.won)}` : formatCoins(0)}
+                  </Text>
+                </View>
+                <View style={styles.sumRow}>
+                  <Text style={styles.sumLabel}>Множник</Text>
+                  <Text style={styles.sumValue}>×{(summary.won / summary.stake).toFixed(2)}</Text>
+                </View>
+                <Text style={styles.sumHint}>Натисни, щоб продовжити</Text>
+              </View>
+            </Pressable>
+          )}
           </View>
-          <View style={styles.btnRow}>
-            <BigButton label="⏩ ПРОПУСТИТИ" color={colors.blue} onPress={() => (play.current.skip = true)} style={styles.half} />
-          </View>
+          {phase === 'run' && (
+            <View style={styles.btnRow}>
+              <BigButton label="⏩ ПРОПУСТИТИ" color={colors.blue} onPress={() => (play.current.skip = true)} style={styles.half} />
+            </View>
+          )}
         </View>
       ) : phase === 'idle' ? (
         duel ? (
@@ -610,6 +654,13 @@ const styles = StyleSheet.create({
   upActive: { color: colors.gold, fontWeight: '800' },
   tierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   roll: { gap: 10, alignItems: 'center' },
+  sumWrap: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 18 },
+  sumCard: { width: '100%', maxWidth: 320, gap: 10, padding: 18, borderRadius: 18, backgroundColor: '#1A1530', borderWidth: 2, borderColor: colors.gold },
+  sumTitle: { color: colors.text, fontWeight: '900', fontSize: 19, textAlign: 'center', marginBottom: 4 },
+  sumRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sumLabel: { color: colors.muted, fontWeight: '700', fontSize: 15 },
+  sumValue: { color: colors.text, fontWeight: '900', fontSize: 17 },
+  sumHint: { color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 6 },
   rollWindow: { height: 96, overflow: 'hidden', borderRadius: 14, backgroundColor: '#0B0B14', borderWidth: 2, borderColor: colors.gold },
   rollStrip: { flexDirection: 'row', position: 'absolute', left: 0, top: 8 },
   rollItem: { width: ROLL_ITEM - 6, height: 76, marginHorizontal: 3, borderRadius: 12, borderWidth: 2, backgroundColor: '#1A1530', alignItems: 'center', justifyContent: 'center' },
