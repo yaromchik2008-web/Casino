@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sfx } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
 import { BetSelector, BigButton, Panel, ResultLine, haptic } from '../components/ui';
@@ -76,7 +76,8 @@ const BlockView = memo(function BlockView({
   const lastKey = useRef(shakeKey);
   if (lastKey.current !== shakeKey) {
     lastKey.current = shakeKey;
-    shake.setValue(1);
+    // На вебі трясіння блоків пропускаємо: пружинна анімація на JS дає лаги.
+    if (!WEB) shake.setValue(1);
     Animated.spring(shake, { toValue: 0, friction: 3, tension: 200, useNativeDriver: true }).start();
   }
   if (block.broken)
@@ -105,6 +106,10 @@ const BlockView = memo(function BlockView({
 });
 
 const NOOP = () => {};
+// На вебі кирку й камеру рухаємо прямо через DOM-стилі: Animated без нативного драйвера тут гальмує.
+const WEB = Platform.OS === 'web';
+type DomNode = { style: Record<string, string> } | null;
+const dom = (r: unknown) => r as DomNode;
 
 // Рулетка, яка вибирає кирку на заїзд: від дерев'яної (мало HP) до алмазної (найбільше HP).
 const ROLL_ITEM = 76;
@@ -184,6 +189,10 @@ export function MineGame({
   const contentH = skyH + size * MINE_ROWS;
   const viewH = Math.min(contentH, Math.max(320, height - 300));
   const cam = useRef(new Animated.Value(0)).current;
+  const pickRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const pickImgRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const camRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const lastHitSfx = useRef(0);
   const pick = PICK_TIERS[tier];
 
   useEffect(
@@ -243,32 +252,50 @@ export function MineGame({
     let next = 0;
     let camY = 0;
     cam.setValue(0);
+    const move = (x: number, y: number, deg: number, cy: number) => {
+      const p = dom(pickRef.current);
+      const im = dom(pickImgRef.current);
+      const c = dom(camRef.current);
+      if (WEB && p && im && c) {
+        p.style.transform = `translate3d(${x}px,${y}px,0)`;
+        im.style.transform = `rotate(${deg}deg)`;
+        c.style.transform = `translate3d(0,${-cy}px,0)`;
+        return;
+      }
+      pos.setValue({ x, y });
+      rot.setValue(deg);
+      cam.setValue(-cy);
+    };
     const total = r.frames.length / 3;
     const t0 = Date.now();
     play.current.skip = false;
     const step = () => {
       if (!play.current.alive) return;
       const f = play.current.skip ? total - 1 : Math.min(total - 1, Math.floor(((Date.now() - t0) / 1000) * FPS));
-      pos.setValue({ x: r.frames[f * 3] * size - size / 2, y: r.frames[f * 3 + 1] * size - size / 2 });
-      rot.setValue(r.frames[f * 3 + 2]);
       // Камера плавно тримає кирку у верхній чверті вікна, тож небо швидко зникає.
       const target = Math.max(0, Math.min(contentH - viewH, skyH + r.frames[f * 3 + 1] * size - viewH * 0.22));
       camY = play.current.skip ? target : camY + (target - camY) * 0.12;
-      cam.setValue(-camY);
+      move(r.frames[f * 3] * size - size / 2, r.frames[f * 3 + 1] * size - size / 2, r.frames[f * 3 + 2], camY);
       let changed = false;
       while (next < r.hits.length && r.hits[next].frame <= f) {
         const h = r.hits[next++];
-        cur = strike(cur, h.index, pick.power).blocks;
+        const prev = cur;
+        // Незмінені блоки лишаються тими самими об'єктами, тож memo не перемальовує всю шахту на кожному ударі.
+        cur = strike(cur, h.index, pick.power).blocks.map((b, k) => (b.hp === prev[k].hp && b.broken === prev[k].broken ? prev[k] : b));
         value += h.value;
         changed = true;
         setPickHp(h.pickHp);
-        setShakes((s) => ({ ...s, [h.index]: (s[h.index] ?? 0) + 1 }));
+        if (!WEB) setShakes((s) => ({ ...s, [h.index]: (s[h.index] ?? 0) + 1 }));
         if (play.current.skip) continue;
         if (h.exploded) {
           sfx('bomb');
           haptic('win');
         } else if (h.broken.length) sfx('break', 0.6);
-        else sfx('hit', 0.5);
+        else if (Date.now() - lastHitSfx.current > 140) {
+          // Дрібні удари йдуть дуже часто; не більше одного звуку на 140 мс.
+          lastHitSfx.current = Date.now();
+          sfx('hit', 0.5);
+        }
         const found = h.broken.map((b) => cur[b]).filter((b) => blockValue(b) > 0);
         if (found.some((b) => b.type === 'diamond')) wallet.track('diamonds', found.filter((b) => b.type === 'diamond').length);
         if (found.length) {
@@ -325,7 +352,7 @@ export function MineGame({
       {blocks && phase === 'run' ? (
         <View style={styles.mine}>
           <View style={[styles.window, { width: size * MINE_COLS, height: viewH }]}>
-          <Animated.View style={{ transform: [{ translateY: cam }] }}>
+          <Animated.View ref={camRef} style={WEB ? styles.willMove : { transform: [{ translateY: cam }] }}>
           <View style={[styles.sky, { width: size * MINE_COLS, height: skyH }]}>
             {STARS.map((st, k) => (
               <View key={k} style={[styles.star, { left: `${st[0]}%`, top: `${st[1]}%`, opacity: st[2] }]} />
@@ -338,15 +365,15 @@ export function MineGame({
             ))}
             <Animated.View
               pointerEvents="none"
-              style={[styles.pick, { width: size, height: size, transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}
+              ref={pickRef}
+              style={[styles.pick, styles.willMove, { width: size, height: size }, !WEB && { transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}
             >
               <View style={[styles.hp, { top: -20, width: size * 1.6, left: -size * 0.3 }]}>
                 <Text style={styles.hpText}>❤ {pickHp}</Text>
               </View>
-              <Animated.Image
-                source={PICKS[tier]}
-                style={{ width: size * 0.8, height: size * 0.8, transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}
-              />
+              <Animated.View ref={pickImgRef} style={!WEB && { transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}>
+                <Image source={PICKS[tier]} style={{ width: size * 0.8, height: size * 0.8 }} />
+              </Animated.View>
             </Animated.View>
           </View>
           </Animated.View>
@@ -398,6 +425,7 @@ const styles = StyleSheet.create({
   energy: { width: '100%', height: 10, borderRadius: 5, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   energyFill: { height: '100%', backgroundColor: colors.green },
   mine: { gap: 0, alignItems: 'center' },
+  willMove: Platform.OS === 'web' ? ({ willChange: 'transform' } as object) : {},
   window: { overflow: 'hidden', borderRadius: 12, alignSelf: 'center', backgroundColor: '#140F0B' },
   grass: { height: 10, alignSelf: 'stretch', backgroundColor: '#4CAF50', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' },
