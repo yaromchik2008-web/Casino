@@ -1,7 +1,7 @@
 // «Шахта»: пікселеві блоки з міцністю, руда цінніша на глибині, динаміт підриває сусідів.
 
 export const MINE_COLS = 6;
-export const MINE_ROWS = 14;
+export const MINE_ROWS = 14; // стільки рядів генеруємо наперед; далі шахта добудовується, поки кирка летить, дна немає
 export const STRIKES = 30;
 // RTP за симуляцією (жадібна стратегія): дерев'яна ≈ 0.65, кам'яна ≈ 0.66, залізна ≈ 0.78, алмазна ≈ 1.15.
 
@@ -44,7 +44,8 @@ export interface Block {
 }
 
 function weights(depth: number): [BlockType, number][] {
-  const d = depth / (MINE_ROWS - 1);
+  // Глибше за MINE_ROWS руда вже не багатшає.
+  const d = Math.min(1, depth / (MINE_ROWS - 1));
   return [
     ['dirt', 40 * (1 - d) + 2],
     ['stone', 30 + 20 * d],
@@ -57,29 +58,33 @@ function weights(depth: number): [BlockType, number][] {
   ];
 }
 
+/** Додає один ряд блоків у кінець шахти. */
+export function addRow(blocks: Block[], rand: () => number = Math.random) {
+  const row = blocks.length / MINE_COLS;
+  const w = weights(row);
+  const total = w.reduce((s, [, x]) => s + x, 0);
+  for (let col = 0; col < MINE_COLS; col++) {
+    let r = rand() * total;
+    let type: BlockType = 'stone';
+    for (const [t, x] of w) {
+      r -= x;
+      if (r < 0) {
+        type = t;
+        break;
+      }
+    }
+    const prize = type === 'chest' ? CHEST_PRIZES[Math.floor(rand() * CHEST_PRIZES.length)] : 0;
+    blocks.push({ type, hp: BLOCKS[type].hp, broken: false, prize });
+  }
+}
+
 export function generateMine(rand: () => number = Math.random): Block[] {
   const blocks: Block[] = [];
-  for (let row = 0; row < MINE_ROWS; row++) {
-    const w = weights(row);
-    const total = w.reduce((s, [, x]) => s + x, 0);
-    for (let col = 0; col < MINE_COLS; col++) {
-      let r = rand() * total;
-      let type: BlockType = 'stone';
-      for (const [t, x] of w) {
-        r -= x;
-        if (r < 0) {
-          type = t;
-          break;
-        }
-      }
-      const prize = type === 'chest' ? CHEST_PRIZES[Math.floor(rand() * CHEST_PRIZES.length)] : 0;
-      blocks.push({ type, hp: BLOCKS[type].hp, broken: false, prize });
-    }
-  }
+  for (let row = 0; row < MINE_ROWS; row++) addRow(blocks, rand);
   return blocks;
 }
 
-export function neighbors(i: number, diagonal = false): number[] {
+export function neighbors(i: number, diagonal = false, rows = MINE_ROWS): number[] {
   const row = Math.floor(i / MINE_COLS);
   const col = i % MINE_COLS;
   const out: number[] = [];
@@ -89,7 +94,7 @@ export function neighbors(i: number, diagonal = false): number[] {
       if (!diagonal && dr && dc) continue;
       const r = row + dr;
       const c = col + dc;
-      if (r >= 0 && r < MINE_ROWS && c >= 0 && c < MINE_COLS) out.push(r * MINE_COLS + c);
+      if (r >= 0 && r < rows && c >= 0 && c < MINE_COLS) out.push(r * MINE_COLS + c);
     }
   return out;
 }
@@ -97,7 +102,7 @@ export function neighbors(i: number, diagonal = false): number[] {
 export function reachable(blocks: Block[], i: number) {
   if (blocks[i].broken) return false;
   if (i < MINE_COLS) return true;
-  return neighbors(i).some((n) => blocks[n].broken);
+  return neighbors(i, false, blocks.length / MINE_COLS).some((n) => blocks[n].broken);
 }
 
 export function blockValue(b: Block) {
@@ -124,7 +129,7 @@ export function strike(blocks: Block[], i: number, power: number): StrikeResult 
     value += blockValue(target);
     if (target.type === 'tnt') {
       exploded = true;
-      for (const n of neighbors(i, true)) {
+      for (const n of neighbors(i, true, next.length / MINE_COLS)) {
         const b = next[n];
         if (b.broken) continue;
         b.broken = true;
@@ -170,8 +175,6 @@ export let ORE_SCALE = 4.2; // RTP ≈ 0.89 з урахуванням шансі
 export function setOreScale(k: number) {
   ORE_SCALE = k;
 }
-/** Бонус × ставка, якщо кирка пробилась до самого низу. */
-export const BOTTOM_BONUS = 1;
 
 export function rollPick(rand: () => number = Math.random): number {
   const total = PICK_TIERS.reduce((s, p) => s + p.weight, 0);
@@ -199,13 +202,17 @@ export interface MineRun {
   frames: number[]; // x, y, кут (градуси) на кожен кадр
   hits: RunHit[];
   value: number;
-  bottom: boolean;
+  /** Шахта на початку заїзду разом з рядами, добудованими по дорозі. */
+  start: Block[];
+  depth: number; // найглибший ряд, до якого дістала кирка
 }
 
 /** Повністю прораховує заїзд наперед: інтерфейс лише програє кадри. */
-export function simulateRun(start: Block[], tier: number, rand: () => number = Math.random): MineRun {
+export function simulateRun(initial: Block[], tier: number, rand: () => number = Math.random): MineRun {
   const pick = PICK_TIERS[tier];
+  const start = initial.map((b) => ({ ...b }));
   const blocks = start.map((b) => ({ ...b }));
+  let depth = 0;
   const G = 28;
   const SUB = 8;
   const dt = 1 / (FPS * SUB);
@@ -218,7 +225,6 @@ export function simulateRun(start: Block[], tier: number, rand: () => number = M
   let hp = pick.hp;
   let cooldown = 0;
   let value = 0;
-  let bottom = false;
   const frames: number[] = [];
   const hits: RunHit[] = [];
   for (let frame = 0; frame < FPS * 60; frame++) {
@@ -235,10 +241,18 @@ export function simulateRun(start: Block[], tier: number, rand: () => number = M
         x = MINE_COLS - r;
         vx = -Math.abs(vx) * 0.6;
       }
+      // Дна немає: перед киркою завжди є ще кілька рядів.
+      while (blocks.length / MINE_COLS < Math.floor(y) + 4) {
+        const from = blocks.length;
+        addRow(start, rand);
+        for (let k = from; k < start.length; k++) blocks.push({ ...start[k] });
+      }
+      const rows = blocks.length / MINE_COLS;
+      depth = Math.max(depth, Math.floor(y));
       const c0 = Math.floor(x - r);
       const r0 = Math.floor(y - r);
       for (let row = r0; row <= r0 + 1; row++) {
-        if (row < 0 || row >= MINE_ROWS) continue;
+        if (row < 0 || row >= rows) continue;
         for (let col = c0; col <= c0 + 1; col++) {
           if (col < 0 || col >= MINE_COLS) continue;
           const i = row * MINE_COLS + col;
@@ -279,15 +293,10 @@ export function simulateRun(start: Block[], tier: number, rand: () => number = M
           }
         }
       }
-      if (hp <= 0 || y > MINE_ROWS + 1) break;
+      if (hp <= 0) break;
     }
     frames.push(x, y, angle % 360);
-    if (y > MINE_ROWS + 1) {
-      bottom = true;
-      value += BOTTOM_BONUS;
-      break;
-    }
     if (hp <= 0) break;
   }
-  return { frames, hits, value, bottom };
+  return { frames, hits, value, start, depth };
 }

@@ -8,7 +8,6 @@ import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
 import {
   BLOCKS,
-  BOTTOM_BONUS,
   Block,
   FPS,
   MINE_COLS,
@@ -165,7 +164,7 @@ function drawMine(
     ctx.fillRect(w - 40, 12, 22, 22);
   }
   const r0 = Math.max(0, Math.floor((camY - skyH) / size));
-  const r1 = Math.min(MINE_ROWS - 1, Math.floor((camY + viewH - skyH) / size));
+  const r1 = Math.min(blocks.length / MINE_COLS - 1, Math.floor((camY + viewH - skyH) / size));
   for (let row = r0; row <= r1; row++) {
     const y = skyH + row * size;
     const shade = Math.min(0.3, row * 0.018);
@@ -301,7 +300,7 @@ export function MineGame({
   const { width, height } = useWindowDimensions();
   const [bet, setBet] = useState(100);
   const [phase, setPhase] = useState<'idle' | 'roll' | 'run' | 'done'>('idle');
-  const [summary, setSummary] = useState<{ stake: number; won: number; bottom: boolean } | null>(null);
+  const [summary, setSummary] = useState<{ stake: number; won: number; depth: number } | null>(null);
   const [blocks, setBlocks] = useState<Block[] | null>(null);
   const [tier, setTier] = useState(0);
   const [pickHp, setPickHp] = useState(0);
@@ -348,7 +347,7 @@ export function MineGame({
     setMessage({ text: duel ? 'Дуель: один заїзд, хто знайде більше' : 'Крутимо рулетку кирок…', tone: 'neutral' });
   };
 
-  const finish = async (value: number, stake: number, bottom: boolean) => {
+  const finish = async (value: number, stake: number, depth: number) => {
     const won = Math.round(value * stake);
     if (duel) {
       setPhase('idle');
@@ -360,11 +359,11 @@ export function MineGame({
       wallet.win(game.id, won);
       if (winTier(won, stake)) await celebrate({ kind: 'win', amount: won, bet: stake });
       else sfx('cash');
-      setMessage({ text: `${bottom ? 'Пробився до дна! ' : ''}Заїзд завершено: +${formatCoins(won)}`, tone: 'win' });
+      setMessage({ text: `Заїзд завершено: +${formatCoins(won)}`, tone: 'win' });
     } else setMessage({ text: 'Кирка зламалась. Спробуй ще!', tone: 'lose' });
     if (!play.current.alive) return;
     // Підсумок висить над шахтою, поки гравець не торкнеться.
-    setSummary({ stake, won, bottom });
+    setSummary({ stake, won, depth });
     setPhase('done');
   };
 
@@ -381,7 +380,10 @@ export function MineGame({
     const stake = runBet;
     setPhase('run');
     setMessage({ text: `${pick.name}: ❤ ${pick.hp} HP. Поїхали!`, tone: 'neutral' });
-    let cur = blocks;
+    // Шахта без дна: рушій добудовує ряди під час заїзду, тож беремо його версію шахти.
+    let cur = r.start;
+    const runH = skyH + size * (r.start.length / MINE_COLS);
+    if (!WEB) setBlocks(cur);
     let value = 0;
     let next = 0;
     let camY = 0;
@@ -430,7 +432,7 @@ export function MineGame({
       if (!play.current.alive) return;
       const f = play.current.skip ? total - 1 : Math.min(total - 1, Math.floor(((Date.now() - t0) / 1000) * FPS));
       // Камера плавно тримає кирку у верхній чверті вікна, тож небо швидко зникає.
-      const target = Math.max(0, Math.min(contentH - viewH, skyH + r.frames[f * 3 + 1] * size - viewH * 0.22));
+      const target = Math.max(0, Math.min(runH - viewH, skyH + r.frames[f * 3 + 1] * size - viewH * 0.22));
       camY = play.current.skip ? target : camY + (target - camY) * 0.12;
       if (!WEB) move(r.frames[f * 3] * size - size / 2, r.frames[f * 3 + 1] * size - size / 2, r.frames[f * 3 + 2], camY);
       let changed = false;
@@ -480,8 +482,7 @@ export function MineGame({
         pendingMsg = null;
       }
       if (f >= total - 1) {
-        if (r.bottom) onProgress?.(Math.round(r.value * stake));
-        setTimeout(() => finish(r.value, stake, r.bottom), 600);
+        setTimeout(() => finish(r.value, stake, r.depth), 600);
         return;
       }
       play.current.raf = requestAnimationFrame(step);
@@ -553,7 +554,7 @@ export function MineGame({
           {phase === 'done' && summary && (
             <Pressable style={styles.sumWrap} onPress={closeSummary} testID="mine-summary">
               <View style={styles.sumCard}>
-                <Text style={styles.sumTitle}>{summary.won > 0 ? (summary.bottom ? '⛏️ Пробився до дна!' : '⛏️ Заїзд завершено') : '💥 Кирка зламалась'}</Text>
+                <Text style={styles.sumTitle}>{summary.won > 0 ? '⛏️ Заїзд завершено' : '💥 Кирка зламалась'}</Text>
                 <View style={styles.sumRow}>
                   <Text style={styles.sumLabel}>Ставка</Text>
                   <Text style={styles.sumValue}>{formatCoins(summary.stake)}</Text>
@@ -567,6 +568,10 @@ export function MineGame({
                 <View style={styles.sumRow}>
                   <Text style={styles.sumLabel}>Множник</Text>
                   <Text style={styles.sumValue}>×{(summary.won / summary.stake).toFixed(2)}</Text>
+                </View>
+                <View style={styles.sumRow}>
+                  <Text style={styles.sumLabel}>Глибина</Text>
+                  <Text style={styles.sumValue}>{summary.depth + 1} м</Text>
                 </View>
                 <Text style={styles.sumHint}>Натисни, щоб продовжити</Text>
               </View>
@@ -606,7 +611,7 @@ export function MineGame({
               ))}
               <Text style={styles.upRow}>🧰 Скриня: випадковий приз до ×{+(1.6 * ORE_SCALE).toFixed(1)}</Text>
               <Text style={styles.upRow}>🧨 Динаміт: підриває всі блоки навколо</Text>
-              <Text style={styles.upRow}>Кожен удар забирає в кирки HP. Пробився до дна: бонус ×{BOTTOM_BONUS}.</Text>
+              <Text style={styles.upRow}>Кожен удар забирає в кирки HP. Дна в шахті немає: копаєш, поки жива кирка.</Text>
             </Panel>
           </>
         )
