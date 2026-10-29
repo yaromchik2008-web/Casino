@@ -8,6 +8,8 @@ import {
   levelFromXp,
   levelName,
   levelReward,
+  MAX_LEVEL,
+  xpForLevel,
   sportOfDay,
   weekId,
   XP_PER_KOPECKS,
@@ -16,7 +18,7 @@ import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
 import { INCOME_CAP_HOURS, REMOVED_ITEMS, findItem, hourlyIncome, sellPrice, vehicleBoost } from './shop';
 import { SportBet, SportPick, betResult, getMatch } from './sports';
-import { tourneyRound } from './friends';
+import { AdminAction, tourneyRound } from './friends';
 import { PICKAXES } from '../games/mineEngine';
 import { findGame } from '../games/catalog';
 
@@ -31,7 +33,7 @@ export function winBoost(gameId: string) {
 
 const KEY = 'freecasino:player:v3';
 
-export const START_BALANCE = 50000; // усі суми в копійках: 50000 = 500,00 ₴
+export const START_BALANCE = 30000; // усі суми в копійках: 30000 = 300,00 ₴
 export const HOURLY_BONUS = 2000;
 export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
@@ -158,6 +160,8 @@ interface WalletApi {
   setBalance: (amount: number) => void;
   enterTourney: (round: number) => void;
   grantItem: (id: string) => 'item' | 'cash' | 'none';
+  /** Команда з термінала розробника (баланс, майно, рівень, повідомлення). */
+  adminApply: (a: AdminAction) => void;
   openGame: (gameId: string) => void;
   reset: () => void;
 }
@@ -543,6 +547,58 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const adminApply = useCallback(
+    (a: AdminAction) => {
+      const v = Math.max(0, Math.round(a.value ?? 0));
+      switch (a.kind) {
+        case 'balance_set':
+          commit((p) => ({ ...p, balance: v }));
+          notify(`🛠️ Розробник встановив баланс: ${formatCoins(v)}`);
+          break;
+        case 'balance_add':
+          commit((p) => ({ ...p, balance: p.balance + v }));
+          notify(`🛠️ Розробник нарахував ${formatCoins(v)}`);
+          break;
+        case 'balance_take':
+          commit((p) => ({ ...p, balance: Math.max(0, p.balance - v) }));
+          notify(`🛠️ Розробник забрав ${formatCoins(v)}`);
+          break;
+        case 'item_give': {
+          const item = a.item ? findItem(a.item) : null;
+          if (!item) break;
+          commit((p) => (p.owned.includes(item.id) ? p : { ...p, owned: [...p.owned, item.id] }));
+          notify(`🛠️ Розробник подарував: ${item.emoji} ${item.title}`);
+          break;
+        }
+        case 'item_take': {
+          const item = a.item ? findItem(a.item) : null;
+          if (!item) break;
+          commit((p) => ({ ...p, owned: p.owned.filter((x) => x !== item.id) }));
+          notify(`🛠️ Розробник забрав: ${item.emoji} ${item.title}`);
+          break;
+        }
+        case 'level_set': {
+          const level = Math.max(1, Math.min(MAX_LEVEL, v));
+          // Рівень ставимо напряму, без нагород за пропущені рівні.
+          commit((p) => ({ ...p, xp: xpForLevel(level), level }));
+          notify(`🛠️ Розробник встановив рівень ${level}`);
+          break;
+        }
+        case 'message':
+          if (a.note) notify(`🛠️ ${a.note}`);
+          break;
+        case 'reset': {
+          const fresh = initialState();
+          stateRef.current = fresh;
+          setState(fresh);
+          notify('🛠️ Розробник скинув прогрес');
+          break;
+        }
+      }
+    },
+    [commit, notify],
+  );
+
   const enterTourney = useCallback(
     (round: number) => commit((p) => ({ ...p, tourney: { round, net: 0 } })),
     [commit],
@@ -584,6 +640,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setBalance,
         enterTourney,
         grantItem,
+        adminApply,
         openGame,
         reset,
       }}

@@ -14,8 +14,8 @@ export const colors = {
 
 // Усі суми зберігаються в копійках ігрових гривень: 100 = 1 ₴. Мінімальна ставка 1 ₴.
 export const MIN_BET = 100;
-export const MAX_BET = 100000;
-export const BETS = [100, 200, 500, 1000, 2000, 5000, 10000, 50000];
+export const MAX_BET = 1000000; // 10 000 ₴
+export const BETS = [100, 200, 500, 1000, 2000, 5000, 10000, 50000, 100000, 1000000];
 export const CURRENCY = '₴';
 
 export function formatCoins(n: number): string {

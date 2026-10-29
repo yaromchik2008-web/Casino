@@ -6,7 +6,9 @@ import { StripItem, StripSpinner, StripSpinnerHandle } from '../components/Strip
 import { BigButton, Panel, haptic } from '../components/ui';
 import { formatDuration, useNow } from '../components/useNow';
 import { dailyMissions, dayId } from '../state/progress';
+import { AdminTerminal } from './AdminTerminal';
 import { InvitePanel } from './InvitePanel';
+import { myProfile } from '../state/friends';
 import { StarsPanel } from './StarsPanel';
 import {
   DAILY_REWARDS,
@@ -47,6 +49,7 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
   const [wheelBusy, setWheelBusy] = useState(false);
   const [promo, setPromo] = useState('');
   const [promoMsg, setPromoMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [terminal, setTerminal] = useState(false);
 
   const today = dayId();
   const dailyClaimed = s.lastDailyDay === today;
@@ -79,6 +82,7 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
 
       <BigButton label="🏆 ТУРНІРИ І ЛІДЕРИ" color={colors.blue} onPress={onOpenTournaments} />
 
+      <AdminTerminal visible={terminal} onClose={() => setTerminal(false)} />
       <InvitePanel />
       <StarsPanel />
 
@@ -99,6 +103,13 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
             style={styles.promoBtn}
             disabled={!promo.trim()}
             onPress={() => {
+              // Секретне слово відкриває термінал розробника, але лише гравцю 777777 (права ще раз перевіряє сервер).
+              if (promo.trim().toLowerCase() === 'hi' && myProfile()?.code === '777777') {
+                setPromo('');
+                setPromoMsg(null);
+                setTerminal(true);
+                return;
+              }
               const r = wallet.redeemPromo(promo);
               if (r === 'invalid') setPromoMsg({ text: 'Такого промокоду немає', ok: false });
               else if (r === 'used') setPromoMsg({ text: 'Цей промокод ти вже використав', ok: false });

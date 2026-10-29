@@ -53,6 +53,13 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
     action: () => void;
   }[] = [
     {
+      title: 'Запроси друга: +200 ₴ обом',
+      text: 'А за 3, 5, 10, 25 і 50 друзів ще призи до 5 000 ₴',
+      colors: ['#22C55E', '#0B3B1E'] as const,
+      emoji: '👥',
+      action: () => onNavigate('bonuses'),
+    },
+    {
       title: 'Нове: Золотий Карась',
       text: 'Наш фірмовий слот з друзями-персонажами і фриспінами',
       colors: ['#FFC83D', '#14102A'] as const,

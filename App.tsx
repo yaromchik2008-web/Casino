@@ -24,8 +24,18 @@ import { colors, formatCoins } from './src/theme';
 // Смуги прокрутки ховаємо: у Telegram Desktop вони з'їдали ширину й ламали сітку ігор.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
   const st = document.createElement('style');
-  st.textContent = '*{scrollbar-width:none}*::-webkit-scrollbar{width:0;height:0;display:none}';
+  // Поля вводу 16px: інакше iPhone (і Telegram на ньому) збільшує масштаб, коли друкуєш.
+  st.textContent =
+    '*{scrollbar-width:none}*::-webkit-scrollbar{width:0;height:0;display:none}input,textarea,select{font-size:16px!important}';
   document.head.appendChild(st);
+  // Забороняємо масштабування сторінки: гра має виглядати як застосунок.
+  let vp = document.querySelector('meta[name=viewport]');
+  if (!vp) {
+    vp = document.createElement('meta');
+    vp.setAttribute('name', 'viewport');
+    document.head.appendChild(vp);
+  }
+  vp.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
 }
 
 const TABS: { id: Tab; label: string; icon: string }[] = [

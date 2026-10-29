@@ -5,13 +5,14 @@ import { Platform } from 'react-native';
 import { telegramName, telegramStartParam } from '../telegram';
 import { formatCoins } from '../theme';
 import { sfx } from '../audio/sound';
-import { claimReferral, claimTransfers, inboxSince, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
+import { claimReferral, claimTransfers, inboxSince, takeAdminActions, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
 import { assetsValue, statusFor } from './shop';
 import { useWallet } from './WalletContext';
 
 const SYNC_MS = 30000;
 const INBOX_MS = 8000;
 const REF_DONE = 'freecasino:ref-done';
+const REF_PENDING = 'freecasino:ref-pending';
 
 // Код друга з посилання-запрошення: t.me/бот?startapp=ref_КОД або сайт ?ref=КОД.
 function referralFromLink(): string | null {
@@ -25,16 +26,24 @@ function referralFromLink(): string | null {
   return null;
 }
 
-async function tryReferral(notify: (t: string) => void) {
-  const code = referralFromLink();
+// Код із посилання запам'ятовуємо одразу: Telegram може перезапустити гру вже без ?ref=.
+const linkCode = referralFromLink();
+if (linkCode) AsyncStorage.setItem(REF_PENDING, linkCode).catch(() => {});
+
+/** Повертає суму, яку одразу зарахували запрошеному (200 ₴), або 0. */
+async function tryReferral(notify: (t: string) => void, credit: (n: number) => void) {
+  const code = linkCode ?? (await AsyncStorage.getItem(REF_PENDING));
   if (!code || (await AsyncStorage.getItem(REF_DONE))) return;
   try {
     const name = await claimReferral(code);
-    notify(`🎉 ${name} запросив тебе! Вам обом по 200 ₴`);
     await AsyncStorage.setItem(REF_DONE, code);
+    // Бонус забираємо й зараховуємо відразу, щоб запрошений побачив свої 200 ₴.
+    const got = await claimTransfers().catch(() => 0);
+    if (got > 0) credit(got);
+    notify(`🎉 ${name} запросив тебе! Тобі +${formatCoins(got || 20000)}, другу теж`);
   } catch (e) {
     const msg = String((e as { message?: string })?.message ?? e);
-    // Остаточні відмови більше не пробуємо; помилки мережі спробуємо наступного разу.
+    // Остаточні відмови більше не пробуємо; помилки мережі й «профіль ще не створився» спробуємо наступного разу.
     if (/already_referred|self|not_found|referral_too_late|referral_limit/.test(msg)) await AsyncStorage.setItem(REF_DONE, code);
   }
 }
@@ -59,7 +68,8 @@ export function useFriendSync() {
         const s = forced != null ? { ...ref.current.state, balance: forced } : ref.current.state;
         const status = statusFor(s.balance + assetsValue(s.owned));
         await syncProfile({ balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}`, owned: s.owned });
-        await tryReferral(ref.current.notify).catch(() => {});
+        await tryReferral(ref.current.notify, ref.current.credit).catch(() => {});
+        for (const a of await takeAdminActions()) if (!stopped) ref.current.adminApply(a);
         if (s.tourney && s.tourney.round === tourneyRound()) await reportTourney(s.tourney.round, s.tourney.net).catch(() => {});
         const got = await claimTransfers();
         if (got > 0 && !stopped) {

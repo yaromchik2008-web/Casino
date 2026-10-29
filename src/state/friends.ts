@@ -110,6 +110,8 @@ const ERRORS: Record<string, string> = {
   durak_turn: 'Зараз хід суперника',
   durak_wait: 'Суперник ще має час на хід',
   durak_bad: 'Сервер не прийняв хід',
+  not_admin: 'Немає прав розробника',
+  no_profile: 'Профіль ще створюється, спробуй за хвилину',
 };
 
 export function friendlyError(e: unknown): string {
@@ -120,6 +122,8 @@ export function friendlyError(e: unknown): string {
     return 'На сервері ще не запущено SQL з docs/supabase-v5.sql';
   if (/tourney|leaderboard|settle|rank/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
     return 'На сервері ще не запущено SQL з docs/supabase-v3.sql';
+  if (/admin|top_referrers/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
+    return 'На сервері ще не запущено SQL з docs/supabase-v12.sql';
   if (msg.includes('duel_id') || msg.includes('durak_duel'))
     return 'На сервері ще не запущено SQL з docs/supabase-v11.sql';
   if (msg.includes('durak') && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
@@ -403,6 +407,49 @@ export async function myReferrals(): Promise<number> {
   const { data, error } = await db().rpc('my_referrals');
   if (error) throw error;
   return Number(data ?? 0);
+}
+
+export async function topReferrers(): Promise<{ name: string; invited: number }[]> {
+  const { data, error } = await db().rpc('top_referrers');
+  if (error) throw error;
+  return (data ?? []) as { name: string; invited: number }[];
+}
+
+// Термінал розробника. Права перевіряє сервер (таблиця admins), тут лише виклики.
+export type AdminKind = 'balance_set' | 'balance_add' | 'balance_take' | 'item_give' | 'item_take' | 'level_set' | 'message' | 'reset';
+
+export interface AdminAction {
+  id: number;
+  kind: AdminKind;
+  value: number | null;
+  item: string | null;
+  note: string | null;
+}
+
+export async function adminPlayers(query = ''): Promise<Profile[]> {
+  const { data, error } = await db().rpc('admin_players', { p_query: query });
+  if (error) throw error;
+  return (data ?? []) as Profile[];
+}
+
+export async function adminAct(code: string, kind: AdminKind, opts: { value?: number; item?: string; note?: string } = {}): Promise<string> {
+  const { data, error } = await db().rpc('admin_act', {
+    p_code: code.trim().toUpperCase(),
+    p_kind: kind,
+    p_value: opts.value ?? null,
+    p_item: opts.item ?? null,
+    p_note: opts.note ?? null,
+  });
+  if (error) throw error;
+  return String(data ?? '');
+}
+
+/** Команди адміна для мене. Без SQL v12 на сервері просто нічого не повертає. */
+export async function takeAdminActions(): Promise<AdminAction[]> {
+  if (!me) return [];
+  const { data, error } = await db().rpc('take_admin_actions');
+  if (error) return [];
+  return ((data ?? []) as AdminAction[]).map((a) => ({ ...a, value: a.value == null ? null : Number(a.value) }));
 }
 
 export function inviteLink(code: string) {
