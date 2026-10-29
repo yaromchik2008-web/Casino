@@ -1,132 +1,53 @@
-import { createElement, memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { createElement, useEffect, useRef, useState } from 'react';
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { sfx } from '../audio/sound';
 import { celebrate, winTier } from '../components/Celebration';
 import { BetSelector, BigButton, Panel, ResultLine, haptic } from '../components/ui';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 import { GameInfo } from './catalog';
-import {
-  BLOCKS,
-  Block,
-  FPS,
-  MINE_COLS,
-  MINE_ROWS,
-  ORE_SCALE,
-  PICK_TIERS,
-  blockValue,
-  generateMine,
-  rollPick,
-  simulateRun,
-  strike,
-} from './mineEngine';
+import { crackTiles, portalTile, tiles } from './digArt';
+import { COLS, Cell, DigRun, FPS, ORE_NAME, ORE_VALUE, Ore, PICKS, SKY_ROWS, cellHp, isOre, rollPick, simulate } from './digEngine';
 
-const TEX = {
-  dirt: require('../../assets/arcade/dirt.png'),
-  grass: require('../../assets/arcade/grass.png'),
-  stone: require('../../assets/arcade/stone.png'),
-  gravel: require('../../assets/arcade/gravel.png'),
-  coal: require('../../assets/arcade/coal.png'),
-  iron: require('../../assets/arcade/iron.png'),
-  gold: require('../../assets/arcade/gold.png'),
-  diamond: require('../../assets/arcade/diamond.png'),
-  chest: require('../../assets/arcade/chest.png'),
-  tnt: require('../../assets/arcade/tnt.png'),
-};
-const CRACKS = [
-  require('../../assets/arcade/crack1.png'),
-  require('../../assets/arcade/crack2.png'),
-  require('../../assets/arcade/crack3.png'),
-];
-const PICKS = [
+const PICK_IMG = [
   require('../../assets/arcade/pick_wood.png'),
   require('../../assets/arcade/pick_stone.png'),
   require('../../assets/arcade/pick_iron.png'),
   require('../../assets/arcade/pick_diamond.png'),
 ];
 
-const STARS: [number, number, number][] = [
-  [6, 20, 0.9], [18, 55, 0.6], [31, 15, 0.8], [44, 70, 0.5], [57, 30, 0.9], [69, 60, 0.6], [83, 18, 0.7], [92, 50, 0.8],
-];
-
-function texture(block: Block, index: number) {
-  if (block.type === 'dirt') return index < MINE_COLS ? TEX.grass : TEX.dirt;
-  if (block.type === 'stone') return index % 3 === 0 ? TEX.gravel : TEX.stone;
-  return TEX[block.type];
-}
-
-const BlockView = memo(function BlockView({
-  block,
-  index,
-  size,
-  canHit,
-  onPress,
-  shakeKey,
-}: {
-  block: Block;
-  index: number;
-  size: number;
-  canHit: boolean;
-  onPress: () => void;
-  shakeKey: number;
-}) {
-  const info = BLOCKS[block.type];
-  const shake = useRef(new Animated.Value(0)).current;
-  const lastKey = useRef(shakeKey);
-  if (lastKey.current !== shakeKey) {
-    lastKey.current = shakeKey;
-    shake.setValue(1);
-    Animated.spring(shake, { toValue: 0, friction: 3, tension: 200, useNativeDriver: true }).start();
-  }
-  if (block.broken)
-    return (
-      <View style={{ width: size, height: size }}>
-        <Image source={TEX.dirt} style={{ width: size, height: size }} />
-        <View style={[StyleSheet.absoluteFill, styles.caveShade]} />
-      </View>
-    );
-  const damage = 1 - block.hp / info.hp;
-  const depth = Math.floor(index / MINE_COLS);
-  return (
-    <Pressable onPress={onPress} disabled={!canHit}>
-      <Animated.View
-        style={{ width: size, height: size, overflow: 'hidden', transform: [{ translateX: shake.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) }] }}
-      >
-        <Image source={texture(block, index)} style={{ width: size, height: size }} />
-        {damage > 0 && <Image source={CRACKS[Math.min(2, Math.floor(damage * 3))]} style={{ position: 'absolute', left: 0, top: 0, width: size, height: size }} />}
-        <View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${Math.min(0.3, depth * 0.018) + (canHit ? 0 : 0.22)})` }]}
-        />
-      </Animated.View>
-    </Pressable>
-  );
-});
-
-const NOOP = () => {};
-// На вебі шахта малюється на Canvas (див. drawMine), на телефонах без вебу лишаються звичайні View.
 const WEB = Platform.OS === 'web';
 
-// ───────────── Веб: уся шахта малюється на одному Canvas, як у звичайних іграх ─────────────
+/** Ціна купівлі кирки × ставка (підібрано симуляцією під той самий RTP ≈ 0.88). */
+const BUY_PRICE = [0, 1.15, 2.05, 8];
 
-type Img = { complete: boolean; naturalWidth: number } & CanvasImageSource;
-function srcOf(m: unknown): string {
-  if (typeof m === 'string') return m;
-  const o = m as { uri?: string; default?: string } | null;
-  return o?.uri ?? o?.default ?? '';
-}
-function loadImg(m: unknown): Img | null {
-  if (!WEB || typeof document === 'undefined') return null;
-  const im = new (globalThis as unknown as { Image: new () => HTMLImageElement }).Image();
-  im.src = srcOf(m);
-  return im as unknown as Img;
-}
-const CTEX = WEB ? (Object.fromEntries(Object.entries(TEX).map(([k, v]) => [k, loadImg(v)])) as Record<keyof typeof TEX, Img | null>) : null;
-const CCRACKS = WEB ? CRACKS.map(loadImg) : [];
-const CPICKS = WEB ? PICKS.map(loadImg) : [];
-const ready = (im: Img | null | undefined): im is Img => !!im && im.complete && im.naturalWidth > 0;
+const ORE_COLOR: Record<Ore, string> = { copper: '#E7A57E', ruby: '#FF5A70', gold: '#F4D03F', emerald: '#36D95E', diamond: '#4FE3E3' };
 
-interface Particle {
+// У дуелі ставка віртуальна, очки = знайдене × 1000.
+export const DUEL_MINE_BET = 1000;
+
+type Img = HTMLImageElement;
+let pickImgs: Img[] | null = null;
+function loadPicks() {
+  if (pickImgs || typeof document === 'undefined') return pickImgs;
+  pickImgs = PICK_IMG.map((m) => {
+    const im = document.createElement('img');
+    const o = m as string | { uri?: string; default?: string };
+    im.src = typeof o === 'string' ? o : (o.uri ?? o.default ?? '');
+    return im;
+  });
+  return pickImgs;
+}
+
+interface Label {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  big?: boolean;
+}
+interface Spark {
   x: number;
   y: number;
   vx: number;
@@ -134,156 +55,296 @@ interface Particle {
   life: number;
   color: string;
 }
-
-function texKey(block: Block, index: number): keyof typeof TEX {
-  if (block.type === 'dirt') return index < MINE_COLS ? 'grass' : 'dirt';
-  if (block.type === 'stone') return index % 3 === 0 ? 'gravel' : 'stone';
-  return block.type;
+interface Flash {
+  x: number;
+  y: number;
+  life: number;
 }
 
-function drawMine(
-  ctx: CanvasRenderingContext2D,
-  o: { blocks: Block[]; size: number; skyH: number; viewH: number; camY: number; px: number; py: number; deg: number; hp: number; tier: number; parts: Particle[] },
+const STARS: [number, number][] = [
+  [0.08, 0.2], [0.2, 0.55], [0.33, 0.15], [0.46, 0.7], [0.58, 0.3], [0.7, 0.62], [0.84, 0.18], [0.93, 0.5], [0.15, 0.85], [0.64, 0.9],
+];
+
+const kop = (v: number) => (Math.round(v) / 100).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Програє прорахований заїзд на канвасі. Нічого з React тут не перемальовується, поки йде гра. */
+function playRun(
+  cv: HTMLCanvasElement,
+  run: DigRun,
+  stake: number,
+  W: number,
+  H: number,
+  ctl: { turbo: boolean; skip: boolean; alive: boolean },
+  hooks: { onEvent: (value: number) => void; onDone: (value: number) => void },
 ) {
-  const { blocks, size, skyH, viewH, camY } = o;
-  const w = size * MINE_COLS;
-  ctx.fillStyle = '#140F0B';
-  ctx.fillRect(0, 0, w, viewH);
-  ctx.save();
-  ctx.translate(0, -Math.round(camY));
-  if (camY < skyH) {
-    ctx.fillStyle = '#1E2350';
-    ctx.fillRect(0, 0, w, skyH);
-    ctx.fillStyle = '#FFFFFF';
-    for (const st of STARS) {
-      ctx.globalAlpha = st[2];
-      ctx.fillRect((st[0] / 100) * w, (st[1] / 100) * skyH, 3, 3);
+  const T = tiles();
+  const cracks = crackTiles();
+  const portal = portalTile();
+  const picks = loadPicks();
+  // Піксель-арту вистачає 1.5× щільності, а малювати так помітно легше.
+  const dpr = Math.min(1.5, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  const ctx = cv.getContext('2d');
+  if (!ctx || !T) return () => {};
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+
+  const size = W / COLS;
+  const sky = ctx.createLinearGradient(0, 0, 0, SKY_ROWS * size);
+  sky.addColorStop(0, '#0E1033');
+  sky.addColorStop(1, '#2A3170');
+  const cells: Cell[] = run.start.cells;
+  const hp = [...run.start.hp];
+  const broken = new Uint8Array(cells.length);
+  const fused = new Map<number, number>();
+  const labels: Label[] = [];
+  const sparks: Spark[] = [];
+  const flashes: Flash[] = [];
+  const total = run.frames.length / 3;
+  let next = 0;
+  let value = 0;
+  let tier = run.tier;
+  let pickHp = PICKS[tier].hp;
+  let camY = 0;
+  let playF = 0;
+  let last = -1;
+  let lastHit = 0;
+  let raf = 0;
+  let ended = false;
+
+  const variant = (i: number, n: number) => ((i * 2654435761) >>> 0) % n;
+  const cx = (i: number) => (i % COLS) + 0.5;
+  const cy = (i: number) => Math.floor(i / COLS) + 0.5;
+  const burst = (i: number, color: string, n = 6) => {
+    for (let k = 0; k < n; k++)
+      sparks.push({ x: cx(i), y: cy(i), vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 5 - 1, life: 0.45 + Math.random() * 0.35, color });
+    if (sparks.length > 160) sparks.splice(0, sparks.length - 160);
+  };
+  const colorOf = (c: Cell) => (isOre(c) ? ORE_COLOR[c] : c === 'grass' ? '#5DBB3F' : c === 'dirt' ? '#8B5A2B' : '#8A8A92');
+
+  const apply = (silent: boolean) => {
+    const f = Math.floor(playF);
+    while (next < run.events.length && run.events[next].frame <= f) {
+      const e = run.events[next++];
+      tier = e.tier;
+      pickHp = e.pickHp;
+      value += e.value;
+      if (e.hp !== undefined) hp[e.cell] = e.hp;
+      for (const i of e.broken) {
+        broken[i] = 1;
+        fused.delete(i);
+        if (!silent) burst(i, colorOf(cells[i]), e.kind === 'boom' ? 4 : 6);
+      }
+      if (e.kind === 'fuse') fused.set(e.cell, performance.now());
+      if (!silent) {
+        for (const [i, v] of e.paid) {
+          if (labels.length > 50) labels.shift();
+          labels.push({ x: cx(i), y: cy(i), text: kop(v * stake), color: ORE_COLOR[cells[i] as Ore], life: 1.3 });
+        }
+        const at = Math.min(f, total - 1);
+        if (e.kind === 'boom') {
+          flashes.push({ x: cx(e.cell), y: cy(e.cell), life: 0.35 });
+          sfx('bomb', 0.7);
+          haptic('win');
+        } else if (e.kind === 'vein') {
+          sfx(ORE_VALUE[cells[e.cell] as Ore] >= 0.3 ? 'win' : 'coin', 0.6);
+        } else if (e.kind === 'upgrade') {
+          labels.push({ x: run.frames[at * 3], y: run.frames[at * 3 + 1] - 1.2, text: 'ПОКРАЩЕННЯ!', color: '#3DDC4B', life: 1.6, big: true });
+          sfx('bonus', 0.8);
+        } else if (e.kind === 'repair') {
+          labels.push({ x: run.frames[at * 3], y: run.frames[at * 3 + 1] - 1.2, text: '+HP', color: '#FF6B6B', life: 1.2, big: true });
+          sfx('cash', 0.6);
+        } else if (e.kind === 'slime') sfx('pop', 0.7);
+        else if (e.kind === 'fuse') sfx('lock', 0.5);
+        else if (e.kind === 'break') sfx('break', 0.45);
+        else if (performance.now() - lastHit > 120) {
+          lastHit = performance.now();
+          sfx('hit', 0.4);
+        }
+      }
+      if (e.value) hooks.onEvent(value);
+    }
+  };
+
+  const draw = (now: number, dt: number) => {
+    const f = Math.min(total - 1, Math.floor(playF));
+    const px = run.frames[f * 3];
+    const py = run.frames[f * 3 + 1];
+    const deg = run.frames[f * 3 + 2];
+    const target = Math.max(0, (SKY_ROWS + py) * size - H * 0.38);
+    camY = ctl.skip ? target : camY + (target - camY) * Math.min(1, dt * 7);
+
+    ctx.fillStyle = '#18181D';
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(0, -Math.round(camY));
+    const skyH = SKY_ROWS * size;
+    if (camY < skyH) {
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, skyH);
+      ctx.fillStyle = '#FFFFFF';
+      for (const [sx, sy] of STARS) ctx.fillRect(sx * W, sy * skyH * 0.8, 2, 2);
+      ctx.fillStyle = '#F4F1C9';
+      ctx.fillRect(size * 0.7, size * 0.5, size * 0.6, size * 0.6);
+    }
+    const r0 = Math.max(0, Math.floor(camY / size) - SKY_ROWS);
+    const r1 = Math.min(cells.length / COLS - 1, Math.ceil((camY + H) / size) - SKY_ROWS);
+    const blink = Math.floor(now / 90) % 2 === 0;
+    for (let row = r0; row <= r1; row++) {
+      const y = (SKY_ROWS + row) * size;
+      for (let col = 0; col < COLS; col++) {
+        const i = row * COLS + col;
+        const x = col * size;
+        if (broken[i]) {
+          const t = T.cave;
+          ctx.drawImage(t[variant(i, t.length)], x, y, size + 0.5, size + 0.5);
+          continue;
+        }
+        const c = cells[i];
+        const t = T[c];
+        ctx.drawImage(t[variant(i, t.length)], x, y, size + 0.5, size + 0.5);
+        const max = cellHp(c);
+        if (hp[i] < max && Number.isFinite(max)) {
+          const stage = Math.min(2, Math.floor((1 - hp[i] / max) * 3));
+          ctx.drawImage(cracks[stage], x, y, size, size);
+        }
+        if (fused.has(i) && blink) {
+          ctx.fillStyle = 'rgba(255,255,255,0.55)';
+          ctx.fillRect(x, y, size, size);
+        }
+      }
+    }
+    // Портал на поверхні, з якого вилітає кирка.
+    const hold = run.hold;
+    if (portal && playF < hold + FPS * 0.6) {
+      const a = playF < hold ? 1 : 1 - (playF - hold) / (FPS * 0.6);
+      ctx.globalAlpha = Math.max(0, a);
+      const ps = size * 2.2;
+      const ox = run.frames[0] * size;
+      const oy = (SKY_ROWS + run.frames[1]) * size;
+      ctx.drawImage(portal, ox - ps / 2, oy - ps / 2, ps, ps);
+      ctx.globalAlpha = 1;
+    }
+    for (const s of sparks) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, s.life * 2));
+      ctx.fillStyle = s.color;
+      const q = Math.max(2, size * 0.09);
+      ctx.fillRect(s.x * size - q / 2, (SKY_ROWS + s.y) * size - q / 2, q, q);
+    }
+    for (const fl of flashes) {
+      const rr = size * (2.6 - fl.life * 3);
+      const fx = fl.x * size;
+      const fy = (SKY_ROWS + fl.y) * size;
+      const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, rr);
+      g.addColorStop(0, `rgba(255,240,200,${Math.min(1, fl.life * 2)})`);
+      g.addColorStop(1, 'rgba(255,150,50,0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = g;
+      ctx.fillRect(fx - rr, fy - rr, rr * 2, rr * 2);
     }
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#F4F1C9';
-    ctx.fillRect(w - 40, 12, 22, 22);
-  }
-  const r0 = Math.max(0, Math.floor((camY - skyH) / size));
-  const r1 = Math.min(blocks.length / MINE_COLS - 1, Math.floor((camY + viewH - skyH) / size));
-  for (let row = r0; row <= r1; row++) {
-    const y = skyH + row * size;
-    const shade = Math.min(0.3, row * 0.018);
-    for (let col = 0; col < MINE_COLS; col++) {
-      const i = row * MINE_COLS + col;
-      const b = blocks[i];
-      const x = col * size;
-      if (b.broken) {
-        const d = CTEX?.dirt;
-        if (ready(d)) ctx.drawImage(d, x, y, size, size);
-        ctx.fillStyle = 'rgba(12,8,4,0.72)';
-        ctx.fillRect(x, y, size, size);
-        continue;
-      }
-      const t = CTEX?.[texKey(b, i)];
-      if (ready(t)) ctx.drawImage(t, x, y, size, size);
-      else {
-        ctx.fillStyle = BLOCKS[b.type].color;
-        ctx.fillRect(x, y, size, size);
-      }
-      const damage = 1 - b.hp / BLOCKS[b.type].hp;
-      if (damage > 0) {
-        const c = CCRACKS[Math.min(2, Math.floor(damage * 3))];
-        if (ready(c)) ctx.drawImage(c, x, y, size, size);
-      }
-      if (shade > 0) {
-        ctx.fillStyle = `rgba(0,0,0,${shade})`;
-        ctx.fillRect(x, y, size, size);
+    // Кирка.
+    const kx = px * size;
+    const ky = (SKY_ROWS + py) * size;
+    const im = picks?.[tier];
+    if (im && im.complete && im.naturalWidth) {
+      ctx.save();
+      ctx.translate(kx, ky);
+      ctx.rotate((deg * Math.PI) / 180);
+      const s = size * 1.3;
+      ctx.drawImage(im, -s / 2, -s / 2, s, s);
+      ctx.restore();
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    const hpText = `❤ ${pickHp}/${PICKS[tier].hp}`;
+    ctx.font = '900 14px system-ui, -apple-system, sans-serif';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.strokeText(hpText, kx, ky - size * 0.85);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(hpText, kx, ky - size * 0.85);
+    for (const l of labels) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, l.life * 1.5));
+      ctx.font = l.big ? '900 18px system-ui, -apple-system, sans-serif' : '800 12px system-ui, -apple-system, sans-serif';
+      const lx = l.x * size;
+      const ly = (SKY_ROWS + l.y) * size;
+      ctx.lineWidth = 3;
+      ctx.strokeText(l.text, lx, ly);
+      ctx.fillStyle = l.big ? l.color : '#FFFFFF';
+      ctx.fillText(l.text, lx, ly);
+      if (!l.big) {
+        ctx.fillStyle = l.color;
+        ctx.fillRect(lx - ctx.measureText(l.text).width / 2 - 8, ly - 3, 6, 6);
       }
     }
-  }
-  for (const p of o.parts) {
-    ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
-    ctx.fillStyle = p.color;
-    const s = Math.max(2, size * 0.09);
-    ctx.fillRect(p.x * size - s / 2, skyH + p.y * size - s / 2, s, s);
-  }
-  ctx.globalAlpha = 1;
-  // Кирка з HP над нею.
-  const cx = o.px * size;
-  const cy = skyH + o.py * size;
-  const pk = CPICKS[o.tier];
-  if (ready(pk)) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate((o.deg * Math.PI) / 180);
-    const ps = size * 0.8;
-    ctx.drawImage(pk, -ps / 2, -ps / 2, ps, ps);
+    ctx.globalAlpha = 1;
     ctx.restore();
-  }
-  ctx.font = '900 13px system-ui, -apple-system, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = '#000000';
-  const label = `❤ ${o.hp}`;
-  ctx.strokeText(label, cx, cy - size * 0.5 - 6);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(label, cx, cy - size * 0.5 - 6);
-  ctx.restore();
+
+    // Плашка «Виграш» внизу.
+    const bw = 130;
+    const bh = 50;
+    const bx = W / 2 - bw / 2;
+    const by = H - bh - 28;
+    ctx.fillStyle = 'rgba(10,10,14,0.78)';
+    ctx.beginPath();
+    const rad = 12;
+    ctx.moveTo(bx + rad, by);
+    ctx.arcTo(bx + bw, by, bx + bw, by + bh, rad);
+    ctx.arcTo(bx + bw, by + bh, bx, by + bh, rad);
+    ctx.arcTo(bx, by + bh, bx, by, rad);
+    ctx.arcTo(bx, by, bx + bw, by, rad);
+    ctx.fill();
+    ctx.fillStyle = '#A9A9B8';
+    ctx.font = '800 11px system-ui, -apple-system, sans-serif';
+    ctx.fillText('ВИГРАШ', W / 2, by + 15);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 19px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`${kop(value * stake)} ₴`, W / 2, by + 34);
+  };
+
+  const step = (now: number) => {
+    if (!ctl.alive) return;
+    // Перший кадр rAF може мати мітку часу, меншу за performance.now() на старті.
+    const dt = last < 0 ? 0 : Math.max(0, Math.min(0.05, (now - last) / 1000));
+    last = now;
+    if (ctl.skip) {
+      playF = total - 1;
+      apply(true);
+    } else {
+      playF = Math.min(total - 1, playF + dt * FPS * (ctl.turbo ? 2.5 : 1));
+      apply(false);
+    }
+    for (let k = sparks.length - 1; k >= 0; k--) {
+      const s = sparks[k];
+      s.vy += 18 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= dt;
+      if (s.life <= 0) sparks.splice(k, 1);
+    }
+    for (let k = labels.length - 1; k >= 0; k--) {
+      labels[k].life -= dt;
+      labels[k].y -= dt * 0.5;
+      if (labels[k].life <= 0) labels.splice(k, 1);
+    }
+    for (let k = flashes.length - 1; k >= 0; k--) {
+      flashes[k].life -= dt;
+      if (flashes[k].life <= 0) flashes.splice(k, 1);
+    }
+    draw(now, dt);
+    if (playF >= total - 1 && next >= run.events.length && !ended) {
+      ended = true;
+      setTimeout(() => ctl.alive && hooks.onDone(run.value), 700);
+    }
+    // Після кінця ще трохи малюємо, щоб уламки й цифри догоріли.
+    if (!ended || sparks.length || labels.length || flashes.length) raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(raf);
 }
-
-/** Кусочки блоку, що розлітаються при ламанні. */
-function burst(parts: Particle[], blocks: Block[], broken: number[]) {
-  for (const i of broken) {
-    const info = BLOCKS[blocks[i].type];
-    const bx = (i % MINE_COLS) + 0.5;
-    const by = Math.floor(i / MINE_COLS) + 0.5;
-    for (let k = 0; k < 6; k++)
-      parts.push({ x: bx, y: by, vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 5 - 1, life: 0.5 + Math.random() * 0.3, color: k % 2 ? info.color : info.dark });
-  }
-  if (parts.length > 120) parts.splice(0, parts.length - 120);
-}
-
-// Рулетка, яка вибирає кирку на заїзд: від дерев'яної (мало HP) до алмазної (найбільше HP).
-const ROLL_ITEM = 76;
-const ROLL_LEN = 36;
-const ROLL_STOP = 30;
-
-function PickRoulette({ tier, onDone }: { tier: number; onDone: () => void }) {
-  const { width } = useWindowDimensions();
-  const view = Math.min(width, 480) - 64;
-  const x = useRef(new Animated.Value(0)).current;
-  const [done, setDone] = useState(false);
-  const strip = useMemo(() => Array.from({ length: ROLL_LEN }, (_, i) => (i === ROLL_STOP ? tier : rollPick())), [tier]);
-  useEffect(() => {
-    sfx('spin', 0.5);
-    const target = -(ROLL_STOP * ROLL_ITEM - view / 2 + ROLL_ITEM / 2) + (Math.random() - 0.5) * ROLL_ITEM * 0.6;
-    Animated.timing(x, { toValue: target, duration: 3000, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => {
-      setDone(true);
-      sfx(tier >= 2 ? 'bigwin' : 'win', 0.7);
-      haptic('win');
-      setTimeout(onDone, 1100);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const t = PICK_TIERS[tier];
-  return (
-    <Panel style={styles.roll}>
-      <Text style={styles.upTitle}>🎰 Яка кирка тобі випаде?</Text>
-      <View style={[styles.rollWindow, { width: view }]}>
-        <Animated.View style={[styles.rollStrip, { transform: [{ translateX: x }] }]}>
-          {strip.map((k, i) => (
-            <View key={i} style={[styles.rollItem, { borderColor: PICK_TIERS[k].color }]}>
-              <Image source={PICKS[k]} style={{ width: 44, height: 44 }} />
-              <Text style={[styles.rollHp, { color: PICK_TIERS[k].color }]}>❤ {PICK_TIERS[k].hp}</Text>
-            </View>
-          ))}
-        </Animated.View>
-        <View pointerEvents="none" style={[styles.rollPointer, { left: view / 2 - 2 }]} />
-      </View>
-      <Text style={[styles.infoText, { color: done ? t.color : colors.muted }]}>
-        {done ? `Випала: ${t.name} · ❤ ${t.hp} HP · сила ${t.power}` : 'Крутимо…'}
-      </Text>
-    </Panel>
-  );
-}
-
-// У дуелі ставка віртуальна, очки = знайдене × 1000.
-export const DUEL_MINE_BET = 1000;
 
 export function MineGame({
   game,
@@ -299,265 +360,191 @@ export function MineGame({
   const wallet = useWallet();
   const { width, height } = useWindowDimensions();
   const [bet, setBet] = useState(100);
-  const [phase, setPhase] = useState<'idle' | 'roll' | 'run' | 'done'>('idle');
-  const [summary, setSummary] = useState<{ stake: number; won: number; depth: number } | null>(null);
-  const [blocks, setBlocks] = useState<Block[] | null>(null);
-  const [tier, setTier] = useState(0);
-  const [pickHp, setPickHp] = useState(0);
-  const [runValue, setRunValue] = useState(0);
-  const [runBet, setRunBet] = useState(0);
-  const [shakes, setShakes] = useState<Record<number, number>>({});
-  const [message, setMessage] = useState({ text: 'Кирка падає сама й ламає блоки, поки в неї є HP', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
-  const pos = useRef(new Animated.ValueXY({ x: 0, y: -100 })).current;
-  const rot = useRef(new Animated.Value(0)).current;
-  const play = useRef<{ raf: number; skip: boolean; alive: boolean }>({ raf: 0, skip: false, alive: true });
-  // Шахта на всю ширину; камера їде за киркою вниз, тож небо зникає, а дна не видно до кінця.
-  const size = Math.floor((Math.min(width, 520) - 32) / MINE_COLS);
-  const skyH = size * 2;
-  const contentH = skyH + size * MINE_ROWS;
-  const viewH = Math.min(contentH, Math.max(320, height - 300));
-  const cam = useRef(new Animated.Value(0)).current;
-  const lastHitSfx = useRef(0);
+  const [phase, setPhase] = useState<'idle' | 'run' | 'done'>('idle');
+  const [turbo, setTurbo] = useState(false);
+  const [summary, setSummary] = useState<{ paid: number; stake: number; won: number; depth: number; tier: number } | null>(null);
+  const [message, setMessage] = useState({ text: 'Кирка падає в шахту без дна й ламає блоки, поки має HP', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pick = PICK_TIERS[tier];
+  const cur = useRef<{ run: DigRun; stake: number; paid: number } | null>(null);
+  const ctl = useRef({ turbo: false, skip: false, alive: true });
 
   useEffect(
     () => () => {
-      play.current.alive = false;
-      cancelAnimationFrame(play.current.raf);
+      ctl.current.alive = false;
     },
     [],
   );
 
-  const show = (v: number) => (duel ? `${Math.round(v)} очок` : formatCoins(v));
-
-  const start = () => {
-    if (!duel && !wallet.bet(game.id, 'fast', bet)) {
-      setMessage({ text: 'Недостатньо коштів', tone: 'lose' });
-      return;
-    }
-    const t = rollPick();
-    setRunBet(duel ? DUEL_MINE_BET : bet);
-    setBlocks(generateMine());
-    setTier(t);
-    setPickHp(PICK_TIERS[t].hp);
-    setRunValue(0);
-    setShakes({});
-    setPhase('roll');
-    setMessage({ text: duel ? 'Дуель: один заїзд, хто знайде більше' : 'Крутимо рулетку кирок…', tone: 'neutral' });
-  };
-
-  const finish = async (value: number, stake: number, depth: number) => {
-    const won = Math.round(value * stake);
+  const finish = async (value: number) => {
+    const c = cur.current;
+    if (!c) return;
+    const won = Math.round(value * c.stake);
     if (duel) {
       setPhase('idle');
-      setBlocks(null);
       duel(won);
       return;
     }
     if (won > 0) {
       wallet.win(game.id, won);
-      if (winTier(won, stake)) await celebrate({ kind: 'win', amount: won, bet: stake });
+      if (winTier(won, c.paid)) await celebrate({ kind: 'win', amount: won, bet: c.paid });
       else sfx('cash');
       setMessage({ text: `Заїзд завершено: +${formatCoins(won)}`, tone: 'win' });
     } else setMessage({ text: 'Кирка зламалась. Спробуй ще!', tone: 'lose' });
-    if (!play.current.alive) return;
-    // Підсумок висить над шахтою, поки гравець не торкнеться.
-    setSummary({ stake, won, depth });
+    if (!ctl.current.alive) return;
+    setSummary({ paid: c.paid, stake: c.stake, won, depth: c.run.depth, tier: c.run.tier });
     setPhase('done');
   };
 
-  const closeSummary = () => {
+  const start = (buy?: number) => {
+    const paid = buy ? Math.round(bet * BUY_PRICE[buy]) : bet;
+    if (!duel && !wallet.bet(game.id, 'fast', paid)) {
+      setMessage({ text: 'Недостатньо коштів', tone: 'lose' });
+      return;
+    }
+    const tier = buy ?? rollPick();
+    const run = simulate(tier);
+    const stake = duel ? DUEL_MINE_BET : bet;
+    cur.current = { run, stake, paid };
+    ctl.current.skip = false;
+    ctl.current.turbo = turbo;
+    sfx('click', 0.5);
     setSummary(null);
-    setPhase('idle');
-    setBlocks(null);
+    if (!WEB) {
+      // Без канвасу (нативний застосунок) одразу показуємо підсумок.
+      finish(run.value);
+      return;
+    }
+    setPhase('run');
   };
 
-  // Програє наперед прорахований заїзд: позиція кирки йде напряму в анімацію, блоки оновлюються лише на ударах.
-  const run = () => {
-    if (!blocks) return;
-    const r = simulateRun(blocks, tier);
-    const stake = runBet;
-    setPhase('run');
-    setMessage({ text: `${pick.name}: ❤ ${pick.hp} HP. Поїхали!`, tone: 'neutral' });
-    // Шахта без дна: рушій добудовує ряди під час заїзду, тож беремо його версію шахти.
-    let cur = r.start;
-    const runH = skyH + size * (r.start.length / MINE_COLS);
-    if (!WEB) setBlocks(cur);
-    let value = 0;
-    let next = 0;
-    let camY = 0;
-    cam.setValue(0);
-    const parts: Particle[] = [];
-    let ctx: CanvasRenderingContext2D | null = null;
-    let lastT = Date.now();
-    let hpNow = pick.hp;
-    let lastUi = 0;
-    let uiDirty = false;
-    let pendingMsg: { text: string; tone: 'win' } | null = null;
-    const paint = (fx: number, fy: number, deg: number, cy: number) => {
+  useEffect(() => {
+    if (phase !== 'run' || !cur.current) return;
+    const { run, stake } = cur.current;
+    let stop = () => {};
+    let wait = 0;
+    // Вікно на весь екран з'являється не одразу, тож чекаємо, поки канвас буде в DOM.
+    const begin = () => {
       const cv = canvasRef.current;
-      if (!cv) return;
-      if (!ctx) {
-        const dpr = Math.min(3, (globalThis as unknown as { devicePixelRatio?: number }).devicePixelRatio ?? 1);
-        cv.width = Math.round(size * MINE_COLS * dpr);
-        cv.height = Math.round(viewH * dpr);
-        ctx = cv.getContext('2d');
-        if (!ctx) return;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.imageSmoothingEnabled = false;
-      }
-      const now = Date.now();
-      const dt = Math.min(0.05, (now - lastT) / 1000);
-      lastT = now;
-      for (let k = parts.length - 1; k >= 0; k--) {
-        const p = parts[k];
-        p.vy += 18 * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.life -= dt;
-        if (p.life <= 0) parts.splice(k, 1);
-      }
-      drawMine(ctx, { blocks: cur, size, skyH, viewH, camY: cy, px: fx, py: fy, deg, hp: hpNow, tier, parts });
-    };
-    const move = (x: number, y: number, deg: number, cy: number) => {
-      pos.setValue({ x, y });
-      rot.setValue(deg);
-      cam.setValue(-cy);
-    };
-    const total = r.frames.length / 3;
-    const t0 = Date.now();
-    play.current.skip = false;
-    const step = () => {
-      if (!play.current.alive) return;
-      const f = play.current.skip ? total - 1 : Math.min(total - 1, Math.floor(((Date.now() - t0) / 1000) * FPS));
-      // Камера плавно тримає кирку у верхній чверті вікна, тож небо швидко зникає.
-      const target = Math.max(0, Math.min(runH - viewH, skyH + r.frames[f * 3 + 1] * size - viewH * 0.22));
-      camY = play.current.skip ? target : camY + (target - camY) * 0.12;
-      if (!WEB) move(r.frames[f * 3] * size - size / 2, r.frames[f * 3 + 1] * size - size / 2, r.frames[f * 3 + 2], camY);
-      let changed = false;
-      while (next < r.hits.length && r.hits[next].frame <= f) {
-        const h = r.hits[next++];
-        const prev = cur;
-        // Незмінені блоки лишаються тими самими об'єктами, тож memo не перемальовує всю шахту на кожному ударі.
-        cur = strike(cur, h.index, pick.power).blocks.map((b, k) => (b.hp === prev[k].hp && b.broken === prev[k].broken ? prev[k] : b));
-        value += h.value;
-        changed = true;
-        hpNow = h.pickHp;
-        if (WEB && !play.current.skip) burst(parts, cur, h.broken);
-        if (!WEB) setShakes((s) => ({ ...s, [h.index]: (s[h.index] ?? 0) + 1 }));
-        if (play.current.skip) continue;
-        if (h.exploded) {
-          sfx('bomb');
-          haptic('win');
-        } else if (h.broken.length) sfx('break', 0.6);
-        else if (Date.now() - lastHitSfx.current > 140) {
-          // Дрібні удари йдуть дуже часто; не більше одного звуку на 140 мс.
-          lastHitSfx.current = Date.now();
-          sfx('hit', 0.5);
-        }
-        const found = h.broken.map((b) => cur[b]).filter((b) => blockValue(b) > 0);
-        if (found.some((b) => b.type === 'diamond')) wallet.track('diamonds', found.filter((b) => b.type === 'diamond').length);
-        if (found.length) {
-          const best = found.sort((a, b) => blockValue(b) - blockValue(a))[0];
-          pendingMsg = { text: `${BLOCKS[best.type].icon} ${BLOCKS[best.type].name}${h.exploded ? ' (вибух!)' : ''} +${show(h.value * stake)}`, tone: 'win' };
-          sfx('coin', 0.6);
-        }
-      }
-      if (WEB) paint(r.frames[f * 3], r.frames[f * 3 + 1], r.frames[f * 3 + 2], camY);
-      if (changed) {
-        // На вебі шахту малює Canvas, тож React-дерево блоків не чіпаємо.
-        if (!WEB) setBlocks(cur);
-        onProgress?.(Math.round(value * stake));
-      }
-      // Панель з HP і знайденим оновлюємо не частіше 4 разів на секунду: кожне оновлення перемальовує екран.
-      const now = Date.now();
-      if (changed) uiDirty = true;
-      if (uiDirty && (now - lastUi > 250 || f >= total - 1)) {
-        uiDirty = false;
-        lastUi = now;
-        setPickHp(hpNow);
-        setRunValue(value);
-        if (pendingMsg) setMessage(pendingMsg);
-        pendingMsg = null;
-      }
-      if (f >= total - 1) {
-        setTimeout(() => finish(r.value, stake, r.depth), 600);
+      if (!cv) {
+        wait = requestAnimationFrame(begin);
         return;
       }
-      play.current.raf = requestAnimationFrame(step);
+      stop = playRun(cv, run, stake, width, height, ctl.current, {
+        onEvent: (v) => onProgress?.(Math.round(v * stake)),
+        onDone: (v) => finish(v),
+      });
     };
-    play.current.raf = requestAnimationFrame(step);
-  };
+    begin();
+    return () => {
+      cancelAnimationFrame(wait);
+      stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   useEffect(() => {
     if (autoStart) start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const toggleTurbo = () => {
+    ctl.current.turbo = !ctl.current.turbo;
+    setTurbo(ctl.current.turbo);
+  };
+  const closeSummary = () => {
+    setSummary(null);
+    setPhase('idle');
+  };
+
+  const totalWeight = PICKS.reduce((s, p) => s + p.weight, 0);
+
   return (
     <View style={styles.root}>
-      <Panel style={styles.info}>
-        {phase === 'idle' ? (
-          <Text style={styles.infoText}>⛏️ Кирка падає за законами фізики й ламає блоки</Text>
-        ) : (
-          <>
-            <Text style={styles.infoText}>
-              {phase === 'roll' ? 'Рулетка кирок' : `${pick.name} · сила ${pick.power}`}
-            </Text>
-            {phase === 'run' && (
-              <>
-                <View style={styles.energy}>
-                  <View style={[styles.energyFill, { width: `${(pickHp / pick.hp) * 100}%`, backgroundColor: pickHp / pick.hp < 0.3 ? colors.red : colors.green }]} />
-                </View>
-                <Text style={styles.infoText}>
-                  ❤ HP кирки: {pickHp}/{pick.hp} · Знайдено: {show(runValue * runBet)}
-                </Text>
-              </>
-            )}
-          </>
-        )}
-      </Panel>
       <ResultLine text={message.text} tone={message.tone} />
-      {phase === 'roll' && <PickRoulette tier={tier} onDone={run} />}
-      {blocks && (phase === 'run' || phase === 'done') ? (
-        <View style={styles.mine}>
-          <View style={[styles.window, { width: size * MINE_COLS, height: viewH }]}>
-          {WEB ? (
-            createElement('canvas', { ref: canvasRef, style: { width: size * MINE_COLS, height: viewH, display: 'block' } })
-          ) : (
-          <Animated.View style={{ transform: [{ translateY: cam }] }}>
-          <View style={[styles.sky, { width: size * MINE_COLS, height: skyH }]}>
-            {STARS.map((st, k) => (
-              <View key={k} style={[styles.star, { left: `${st[0]}%`, top: `${st[1]}%`, opacity: st[2] }]} />
-            ))}
-            <View style={styles.moon} />
+      {duel ? (
+        <BigButton label="ПОЧАТИ ДУЕЛЬ" onPress={() => start()} />
+      ) : (
+        <>
+          <BetSelector value={bet} onChange={setBet} />
+          <BigButton label={`⛏️ КОПАТИ · ${formatCoins(bet)}`} onPress={() => start()} />
+          <View style={styles.row}>
+            <Pressable onPress={toggleTurbo} style={[styles.chip, turbo && styles.chipOn]}>
+              <Text style={[styles.chipText, turbo && styles.chipTextOn]}>⚡ Турбо {turbo ? 'увімк.' : 'вимк.'}</Text>
+            </Pressable>
           </View>
-          <View style={[styles.grid, { width: size * MINE_COLS }]}>
-            {blocks.map((b, i) => (
-              <BlockView key={i} block={b} index={i} size={size} canHit onPress={NOOP} shakeKey={shakes[i] ?? 0} />
+          <Panel style={styles.gap}>
+            <Text style={styles.title}>Купити кирку</Text>
+            <Text style={styles.small}>Заїзд одразу почнеться з цією киркою. Виплати рахуються від ставки {formatCoins(bet)}.</Text>
+            {[1, 2, 3].map((t) => (
+              <Pressable key={t} onPress={() => start(t)} style={styles.buyRow}>
+                <Image source={PICK_IMG[t]} style={styles.buyImg} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.buyName}>{PICKS[t].name}</Text>
+                  <Text style={styles.small}>
+                    ❤ {PICKS[t].hp} HP · копає ×{PICKS[t].power}
+                  </Text>
+                </View>
+                <View style={styles.price}>
+                  <Text style={styles.priceText}>{formatCoins(Math.round(bet * BUY_PRICE[t]))}</Text>
+                </View>
+              </Pressable>
             ))}
-            <Animated.View
-              pointerEvents="none"
-              style={[styles.pick, { width: size, height: size }, { transform: [{ translateX: pos.x }, { translateY: pos.y }] }]}
-            >
-              <View style={[styles.hp, { top: -20, width: size * 1.6, left: -size * 0.3 }]}>
-                <Text style={styles.hpText}>❤ {pickHp}</Text>
+          </Panel>
+          <Panel style={styles.gap}>
+            <Text style={styles.title}>Як це працює</Text>
+            <Text style={styles.small}>
+              Кожен заїзд дає випадкову кирку. Вона падає в шахту без дна й ламає блоки, поки не закінчиться HP. Удар по руді розбиває
+              всю жилу, і кожен її блок приносить виплату. Чим глибше, тим багатша порода.
+            </Text>
+            <Text style={styles.sub}>Руда за блок</Text>
+            {(Object.keys(ORE_VALUE) as Ore[]).map((o) => (
+              <View key={o} style={styles.oreRow}>
+                <View style={[styles.oreDot, { backgroundColor: ORE_COLOR[o] }]} />
+                <Text style={styles.oreName}>{ORE_NAME[o]}</Text>
+                <Text style={styles.small}>×{ORE_VALUE[o]}</Text>
+                <Text style={styles.oreWin}>{formatCoins(bet * ORE_VALUE[o])}</Text>
               </View>
-              <Animated.View style={{ transform: [{ rotate: rot.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }] }}>
-                <Image source={PICKS[tier]} style={{ width: size * 0.8, height: size * 0.8 }} />
-              </Animated.View>
-            </Animated.View>
-          </View>
-          </Animated.View>
+            ))}
+            <Text style={styles.sub}>Особливі блоки</Text>
+            <Text style={styles.small}>🧨 Динаміт: вибухає після короткого ґнота й розбиває все навколо</Text>
+            <Text style={styles.small}>🟩 Слиз: підкидає кирку вгору</Text>
+            <Text style={styles.small}>⬆️ Ящик покращення: кирка стає кращою на рівень і відновлює HP</Text>
+            <Text style={styles.small}>➕ Ящик ремонту: відновлює 40% HP кирки</Text>
+            <Text style={styles.small}>⬛ Бедрок: не ламається</Text>
+            <Text style={styles.sub}>Стартова кирка</Text>
+            {PICKS.map((p, i) => (
+              <View key={p.name} style={styles.oreRow}>
+                <Image source={PICK_IMG[i]} style={{ width: 22, height: 22 }} />
+                <Text style={styles.oreName}>{p.name}</Text>
+                <Text style={styles.small}>{p.hp} HP</Text>
+                <Text style={styles.oreWin}>{((p.weight / totalWeight) * 100).toFixed(1)}%</Text>
+              </View>
+            ))}
+          </Panel>
+        </>
+      )}
+      <Modal visible={phase !== 'idle'} transparent={false} animationType="none" onRequestClose={() => {
+        ctl.current.skip = true;
+      }}>
+        <View style={styles.full}>
+          {WEB && createElement('canvas', { ref: canvasRef, style: { width, height, display: 'block', touchAction: 'none' } })}
+          {phase === 'run' && (
+            <View style={styles.topBar}>
+              <Pressable onPress={toggleTurbo} style={[styles.topBtn, turbo && styles.chipOn]}>
+                <Text style={[styles.topText, turbo && styles.chipTextOn]}>⚡</Text>
+              </Pressable>
+              <Pressable onPress={() => (ctl.current.skip = true)} style={styles.topBtn} testID="mine-skip">
+                <Text style={styles.topText}>⏩</Text>
+              </Pressable>
+            </View>
           )}
           {phase === 'done' && summary && (
             <Pressable style={styles.sumWrap} onPress={closeSummary} testID="mine-summary">
               <View style={styles.sumCard}>
-                <Text style={styles.sumTitle}>{summary.won > 0 ? '⛏️ Заїзд завершено' : '💥 Кирка зламалась'}</Text>
+                <Text style={styles.sumTitle}>{summary.won > 0 ? `ВИГРАШ ${formatCoins(summary.won)}` : '💥 Кирка зламалась'}</Text>
                 <View style={styles.sumRow}>
                   <Text style={styles.sumLabel}>Ставка</Text>
-                  <Text style={styles.sumValue}>{formatCoins(summary.stake)}</Text>
+                  <Text style={styles.sumValue}>{formatCoins(summary.paid)}</Text>
                 </View>
                 <View style={styles.sumRow}>
                   <Text style={styles.sumLabel}>Виграш</Text>
@@ -567,108 +554,53 @@ export function MineGame({
                 </View>
                 <View style={styles.sumRow}>
                   <Text style={styles.sumLabel}>Множник</Text>
-                  <Text style={styles.sumValue}>×{(summary.won / summary.stake).toFixed(2)}</Text>
+                  <Text style={styles.sumValue}>×{(summary.won / summary.paid).toFixed(2)}</Text>
                 </View>
                 <View style={styles.sumRow}>
-                  <Text style={styles.sumLabel}>Глибина</Text>
-                  <Text style={styles.sumValue}>{summary.depth + 1} м</Text>
+                  <Text style={styles.sumLabel}>Кирка · глибина</Text>
+                  <Text style={styles.sumValue}>
+                    {PICKS[summary.tier].name.split(' ')[0]} · {summary.depth + 1} м
+                  </Text>
                 </View>
                 <Text style={styles.sumHint}>Натисни, щоб продовжити</Text>
               </View>
             </Pressable>
           )}
-          </View>
-          {phase === 'run' && (
-            <View style={styles.btnRow}>
-              <BigButton label="⏩ ПРОПУСТИТИ" color={colors.blue} onPress={() => (play.current.skip = true)} style={styles.half} />
-            </View>
-          )}
         </View>
-      ) : phase === 'idle' ? (
-        duel ? (
-          <BigButton label="ПОЧАТИ ДУЕЛЬ" onPress={start} />
-        ) : (
-          <>
-            <BetSelector value={bet} onChange={setBet} />
-            <BigButton label={`У ШАХТУ · ${formatCoins(bet)}`} onPress={start} />
-            <Panel style={styles.upgrade}>
-              <Text style={styles.upTitle}>Кирки (випадають у рулетці перед заїздом)</Text>
-              {PICK_TIERS.map((p, i) => (
-                <View key={p.name} style={styles.tierRow}>
-                  <Image source={PICKS[i]} style={{ width: 26, height: 26 }} />
-                  <Text style={styles.upRow}>
-                    {p.name}: ❤ {p.hp} HP, сила {p.power} · шанс {Math.round((p.weight / PICK_TIERS.reduce((s, t) => s + t.weight, 0)) * 100)}%
-                  </Text>
-                </View>
-              ))}
-            </Panel>
-            <Panel>
-              <Text style={styles.upTitle}>Що в шахті (× ставка)</Text>
-              {(['coal', 'iron', 'gold', 'diamond'] as const).map((t) => (
-                <Text key={t} style={styles.upRow}>
-                  {BLOCKS[t].icon} {BLOCKS[t].name}: міцність {BLOCKS[t].hp}, ×{+(BLOCKS[t].value * ORE_SCALE).toFixed(2)}
-                </Text>
-              ))}
-              <Text style={styles.upRow}>🧰 Скриня: випадковий приз до ×{+(1.6 * ORE_SCALE).toFixed(1)}</Text>
-              <Text style={styles.upRow}>🧨 Динаміт: підриває всі блоки навколо</Text>
-              <Text style={styles.upRow}>Кожен удар забирає в кирки HP. Дна в шахті немає: копаєш, поки жива кирка.</Text>
-            </Panel>
-          </>
-        )
-      ) : null}
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { gap: 12 },
-  info: { gap: 6, alignItems: 'center' },
-  infoText: { color: colors.text, fontWeight: '800' },
-  energy: { width: '100%', height: 10, borderRadius: 5, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  energyFill: { height: '100%', backgroundColor: colors.green },
-  mine: { gap: 0, alignItems: 'center' },
-  window: { overflow: 'hidden', borderRadius: 12, alignSelf: 'center', backgroundColor: '#140F0B' },
-  grass: { height: 10, alignSelf: 'stretch', backgroundColor: '#4CAF50', borderTopLeftRadius: 6, borderTopRightRadius: 6 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', alignSelf: 'center' },
-  sky: { height: 70, alignSelf: 'center', backgroundColor: '#1E2350', overflow: 'hidden' },
-  star: { position: 'absolute', width: 3, height: 3, backgroundColor: '#FFFFFF' },
-  moon: { position: 'absolute', right: 18, top: 12, width: 22, height: 22, backgroundColor: '#F4F1C9' },
-  caveShade: { backgroundColor: 'rgba(12,8,4,0.72)' },
-  hp: { position: 'absolute', zIndex: 6, alignItems: 'center' },
-  hpText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13, textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 1, height: 1 } },
-  block: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderTopColor: 'rgba(255,255,255,0.28)',
-    borderLeftColor: 'rgba(255,255,255,0.18)',
-    borderRightColor: 'rgba(0,0,0,0.35)',
-    borderBottomColor: 'rgba(0,0,0,0.45)',
-  },
-  px: { position: 'absolute' },
-  tntBand: { position: 'absolute', left: 0, right: 0, backgroundColor: '#F5F5F5' },
-  pick: { position: 'absolute', left: 0, top: 0, alignItems: 'center', justifyContent: 'center', zIndex: 5 },
-  btnRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch', marginTop: 12 },
-  half: { flex: 1 },
-  crack: { position: 'absolute', alignSelf: 'center', top: '22%', opacity: 0.85 },
-  cave: { backgroundColor: '#140F0B', borderWidth: 1, borderColor: '#0A0705' },
-  upgrade: { gap: 6 },
-  upTitle: { color: colors.gold, fontWeight: '900', fontSize: 15, marginBottom: 4 },
-  upRow: { color: colors.text, fontSize: 13 },
-  upActive: { color: colors.gold, fontWeight: '800' },
-  tierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  roll: { gap: 10, alignItems: 'center' },
+  gap: { gap: 6 },
+  row: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  chipOn: { backgroundColor: colors.gold, borderColor: colors.gold },
+  chipText: { color: colors.text, fontWeight: '800', fontSize: 13 },
+  chipTextOn: { color: '#1A1200' },
+  title: { color: colors.gold, fontWeight: '900', fontSize: 16 },
+  sub: { color: colors.gold, fontWeight: '900', fontSize: 13, marginTop: 8 },
+  small: { color: colors.muted, fontSize: 13 },
+  buyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, backgroundColor: colors.surfaceAlt },
+  buyImg: { width: 34, height: 34 },
+  buyName: { color: colors.text, fontWeight: '800' },
+  price: { backgroundColor: colors.gold, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  priceText: { color: '#1A1200', fontWeight: '900' },
+  oreRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  oreDot: { width: 14, height: 14, borderRadius: 3 },
+  oreName: { color: colors.text, fontWeight: '700', flex: 1 },
+  oreWin: { color: colors.gold, fontWeight: '900', minWidth: 70, textAlign: 'right' },
+  full: { flex: 1, backgroundColor: '#18181D' },
+  topBar: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', gap: 8 },
+  topBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  topText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
   sumWrap: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 18 },
-  sumCard: { width: '100%', maxWidth: 320, gap: 10, padding: 18, borderRadius: 18, backgroundColor: '#1A1530', borderWidth: 2, borderColor: colors.gold },
-  sumTitle: { color: colors.text, fontWeight: '900', fontSize: 19, textAlign: 'center', marginBottom: 4 },
+  sumCard: { width: '100%', maxWidth: 330, gap: 10, padding: 18, borderRadius: 18, backgroundColor: '#1A1530', borderWidth: 2, borderColor: colors.gold },
+  sumTitle: { color: colors.gold, fontWeight: '900', fontSize: 21, textAlign: 'center', marginBottom: 4 },
   sumRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sumLabel: { color: colors.muted, fontWeight: '700', fontSize: 15 },
-  sumValue: { color: colors.text, fontWeight: '900', fontSize: 17 },
+  sumValue: { color: colors.text, fontWeight: '900', fontSize: 16 },
   sumHint: { color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 6 },
-  rollWindow: { height: 96, overflow: 'hidden', borderRadius: 14, backgroundColor: '#0B0B14', borderWidth: 2, borderColor: colors.gold },
-  rollStrip: { flexDirection: 'row', position: 'absolute', left: 0, top: 8 },
-  rollItem: { width: ROLL_ITEM - 6, height: 76, marginHorizontal: 3, borderRadius: 12, borderWidth: 2, backgroundColor: '#1A1530', alignItems: 'center', justifyContent: 'center' },
-  rollHp: { fontSize: 11, fontWeight: '900' },
-  rollPointer: { position: 'absolute', top: 0, bottom: 0, width: 4, backgroundColor: colors.gold },
 });
