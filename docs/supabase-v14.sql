@@ -1,4 +1,5 @@
--- Casino Victor v14: у «Смертельній рулетці» після пострілу «в себе» револьвер теж переходить супернику.
+-- Casino Victor v14: «Смертельна рулетка» як класична російська рулетка: стріляєш у себе,
+-- порожньо — револьвер переходить супернику, без бонусу.
 -- Запусти один раз у Supabase (SQL Editor → New query → Run) після docs/supabase-v13.sql.
 
 create or replace function public.roulette_act(p_id bigint, p_version int, p_self boolean) returns public.roulette_tables
@@ -14,11 +15,8 @@ begin
   if fire then
     perform public.roulette_settle(p_id, case when p_self then (1 - seat)::smallint else seat end, case when p_self then 'self_fire' else 'shoot_fire' end);
   elsif p_self then
-    -- Порожньо в себе: +10 ₴ сміливцю, і револьвер переходить супернику.
-    insert into public.transfers (sender, receiver, amount) values (null, auth.uid(), 1000);
-    update public.roulette_tables set shots = shots + 1, holder = 1 - seat, last = 'self', version = version + 1, updated_at = now(),
-      bonus_a = bonus_a + case when seat = 0 then 1000 else 0 end, bonus_b = bonus_b + case when seat = 1 then 1000 else 0 end
-    where id = p_id;
+    -- Порожньо: револьвер переходить супернику.
+    update public.roulette_tables set shots = shots + 1, holder = 1 - seat, last = 'self', version = version + 1, updated_at = now() where id = p_id;
   else
     update public.roulette_tables set shots = shots + 1, holder = 1 - seat, last = 'shoot', version = version + 1, updated_at = now() where id = p_id;
   end if;

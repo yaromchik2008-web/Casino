@@ -36,8 +36,8 @@ function Scene({
   flash: 'bang' | 'click' | null;
   dead: 'me' | 'them' | null;
 }) {
-  // Хто тримає револьвер, той цілиться в іншого (або в себе під час пострілу «в себе»).
-  const aimAt = holder === 'me' ? 'them' : holder === 'them' ? 'me' : null;
+  // Класична російська рулетка: хто тримає револьвер, той приставляє його до себе.
+  const aimAt = holder;
   return (
     <View style={styles.scene}>
       <View style={styles.person}>
@@ -52,7 +52,7 @@ function Scene({
         {aimAt === 'me' && <Text style={styles.arrow}>⬇</Text>}
         {flash && <Text style={styles.flash}>{flash === 'bang' ? '💥 БАХ!' : '…клац'}</Text>}
       </View>
-      {aimAt && <Text style={styles.aimText}>{aimAt === 'them' ? `цілишся в ${opponent}` : 'ціляться в тебе'}</Text>}
+      {aimAt && <Text style={styles.aimText}>{aimAt === 'them' ? `револьвер у ${opponent}` : 'револьвер у тебе'}</Text>}
       <View style={styles.drum}>
         {Array.from({ length: CHAMBERS }, (_, i) => (
           <View key={i} style={[styles.chamber, i < shots && styles.chamberUsed]} />
@@ -210,9 +210,8 @@ function Rules() {
   return (
     <Panel style={styles.rules}>
       <Text style={styles.rulesTitle}>Правила</Text>
-      <Text style={styles.rule}>Обидва ставите однаково. Монетка WIN / LOSE вирішує, у кого револьвер першим.</Text>
-      <Text style={styles.rule}>🎯 Вистрілити: патрон — суперник падає, ти забираєш банк. Порожньо — револьвер у суперника, цілиться в тебе.</Text>
-      <Text style={styles.rule}>😰 В себе: порожньо — +10 ₴, і револьвер переходить супернику. Патрон — ти програв.</Text>
+      <Text style={styles.rule}>Класична російська рулетка. Обидва ставите однаково, монетка WIN / LOSE вирішує, хто тисне на курок першим.</Text>
+      <Text style={styles.rule}>Тиснеш на курок: порожньо — револьвер переходить супернику. Патрон — ти програв, суперник забирає банк.</Text>
       <Text style={styles.rule}>У барабані 6 камор і 1 патрон, тож з кожним клацанням ризик більший.</Text>
     </Panel>
   );
@@ -311,7 +310,6 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
   const dead =
     table?.status === 'finished' && table.last !== 'timeout' ? (table.winner === seat ? 'them' : 'me') : null;
   const idle = table ? now - new Date(table.updated_at).getTime() : 0;
-  const myBonus = table ? (seat === 0 ? table.bonus_a : table.bonus_b) : 0;
   const text = !table
     ? 'Відкриваю стіл…'
     : !coinDone
@@ -319,18 +317,14 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
       : table.status === 'finished'
         ? table.winner === seat
           ? `Перемога! +${formatCoins(table.stake * 2)}${table.last === 'timeout' ? ' (суперник не встиг)' : ''}`
-          : `Поразка. ${opponentName} забирає банк`
+          : `💀 Патрон! ${opponentName} забирає банк`
         : table.shots === 0
           ? table.coin === seat
             ? 'WIN! Револьвер у тебе'
             : `LOSE. Револьвер у ${opponentName}`
-          : table.last === 'self'
-            ? table.holder === seat
-              ? `${opponentName} вистрілив у себе… порожньо. Твій хід`
-              : `Порожньо! +${formatCoins(SELF_BONUS)}. Револьвер у ${opponentName}`
-            : myTurn
-              ? `${opponentName} промахнувся! Твій хід`
-              : `Порожньо. Револьвер у ${opponentName}`;
+          : myTurn
+            ? `${opponentName}: клац… порожньо. Твій хід`
+            : `Клац… порожньо. Револьвер у ${opponentName}`;
 
   return (
     <View style={styles.flex}>
@@ -348,12 +342,8 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
           {table && !coinDone && <Coin win={table.coin === seat} spinning />}
         </Panel>
         <ResultLine text={error ?? text} tone={table?.status === 'finished' ? (table.winner === seat ? 'win' : 'lose') : 'neutral'} />
-        {myBonus > 0 && <Text style={styles.note}>Бонус за сміливість: +{formatCoins(myBonus)}</Text>}
         {myTurn ? (
-          <View style={styles.choice}>
-            <BigButton label="🎯 ВИСТРІЛИТИ" color={colors.red} disabled={busy} onPress={() => act(false)} />
-            <BigButton label="😰 В СЕБЕ" color="#6B21A8" disabled={busy} onPress={() => act(true)} />
-          </View>
+          <BigButton label="🔫 НАТИСНУТИ НА КУРОК" color={colors.red} disabled={busy} onPress={() => act(true)} />
         ) : playing && coinDone && idle > CLAIM_MS ? (
           <BigButton label="⏱ СУПЕРНИК МОВЧИТЬ: ЗАБРАТИ ПЕРЕМОГУ" onPress={claim} />
         ) : table?.status === 'finished' ? (
