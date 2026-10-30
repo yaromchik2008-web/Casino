@@ -10,7 +10,7 @@ import { GameInfo } from './catalog';
 
 // «Смертельна рулетка»: у барабані 6 камор і 1 патрон. Монетка вирішує, у кого револьвер першим.
 // Вистрілив у суперника й влучив — забираєш банк; порожньо — револьвер переходить до нього.
-// «В себе»: порожньо — +10 ₴ і револьвер лишається в тебе; патрон — програв.
+// «В себе»: порожньо — +10 ₴, і револьвер переходить супернику; патрон — програв.
 
 export const SELF_BONUS = 1000;
 const CHAMBERS = 6;
@@ -155,23 +155,19 @@ export function DeathRouletteGame({ game }: { game: GameInfo }) {
         return later(() => finish(victim === 'them'), 700);
       }
       setFlash('click');
-      if (self) {
-        // Порожньо в себе: +10 ₴ сміливцю, револьвер лишається.
-        if (who === 'me') {
-          wallet.credit(SELF_BONUS);
-          setBonus((b) => b + SELF_BONUS);
-          setMessage({ text: `Порожньо! +${formatCoins(SELF_BONUS)} за сміливість`, tone: 'win' });
-          setPhase('aim');
-        } else {
-          setMessage({ text: 'Бот вистрілив у себе… порожньо', tone: 'neutral' });
-          later(botTurn, BOT_MS);
-        }
-        return;
+      // Після будь-якого порожнього пострілу револьвер переходить супернику (за бажанням ghj).
+      if (self && who === 'me') {
+        wallet.credit(SELF_BONUS);
+        setBonus((b) => b + SELF_BONUS);
       }
       const next = who === 'me' ? 'them' : 'me';
       setHolder(next);
       setPhase('aim');
-      if (next === 'them') {
+      if (self && who === 'me') {
+        setMessage({ text: `Порожньо! +${formatCoins(SELF_BONUS)}. Тепер револьвер у бота`, tone: 'win' });
+        later(botTurn, BOT_MS);
+      } else if (self) setMessage({ text: 'Бот вистрілив у себе… порожньо. Твій хід', tone: 'win' });
+      else if (next === 'them') {
         setMessage({ text: 'Порожньо. Тепер револьвер у бота і дивиться на тебе', tone: 'lose' });
         later(botTurn, BOT_MS);
       } else setMessage({ text: 'Бот промахнувся! Твій хід', tone: 'win' });
@@ -216,7 +212,7 @@ function Rules() {
       <Text style={styles.rulesTitle}>Правила</Text>
       <Text style={styles.rule}>Обидва ставите однаково. Монетка WIN / LOSE вирішує, у кого револьвер першим.</Text>
       <Text style={styles.rule}>🎯 Вистрілити: патрон — суперник падає, ти забираєш банк. Порожньо — револьвер у суперника, цілиться в тебе.</Text>
-      <Text style={styles.rule}>😰 В себе: порожньо — +10 ₴ і револьвер лишається в тебе. Патрон — ти програв.</Text>
+      <Text style={styles.rule}>😰 В себе: порожньо — +10 ₴, і револьвер переходить супернику. Патрон — ти програв.</Text>
       <Text style={styles.rule}>У барабані 6 камор і 1 патрон, тож з кожним клацанням ризик більший.</Text>
     </Panel>
   );
@@ -330,8 +326,8 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
             : `LOSE. Револьвер у ${opponentName}`
           : table.last === 'self'
             ? table.holder === seat
-              ? `Порожньо! +${formatCoins(SELF_BONUS)}. Знову твій хід`
-              : `${opponentName} вистрілив у себе… порожньо`
+              ? `${opponentName} вистрілив у себе… порожньо. Твій хід`
+              : `Порожньо! +${formatCoins(SELF_BONUS)}. Револьвер у ${opponentName}`
             : myTurn
               ? `${opponentName} промахнувся! Твій хід`
               : `Порожньо. Револьвер у ${opponentName}`;

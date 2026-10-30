@@ -377,9 +377,9 @@ begin
   if fire then
     perform public.roulette_settle(p_id, case when p_self then (1 - seat)::smallint else seat end, case when p_self then 'self_fire' else 'shoot_fire' end);
   elsif p_self then
-    -- Порожньо в себе: +10 ₴ сміливцю, і револьвер лишається в нього.
+    -- Порожньо в себе: +10 ₴ сміливцю, і револьвер переходить супернику.
     insert into public.transfers (sender, receiver, amount) values (null, auth.uid(), 1000);
-    update public.roulette_tables set shots = shots + 1, last = 'self', version = version + 1, updated_at = now(),
+    update public.roulette_tables set shots = shots + 1, holder = 1 - seat, last = 'self', version = version + 1, updated_at = now(),
       bonus_a = bonus_a + case when seat = 0 then 1000 else 0 end, bonus_b = bonus_b + case when seat = 1 then 1000 else 0 end
     where id = p_id;
   else
