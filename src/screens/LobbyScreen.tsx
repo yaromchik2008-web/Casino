@@ -68,10 +68,10 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
     },
     {
       title: 'Нове: Смертельна рулетка',
-      text: 'Один патрон, шість камор. З ботом або дуеллю з другом',
+      text: 'Один патрон, шість камор. Дуель з другом у вкладці «Друзі»',
       colors: ['#B91C1C', '#1A0B0B'] as const,
       emoji: '🔫',
-      action: () => onOpenGame('smertelna-ruletka'),
+      action: () => onNavigate('friends'),
     },
     {
       title: 'Нове: Золотий Карась',

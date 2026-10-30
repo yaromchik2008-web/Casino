@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { sfx } from '../audio/sound';
 import { celebrate } from '../components/Celebration';
 import { BetSelector, BigButton, Panel, ResultLine, haptic } from '../components/ui';
@@ -346,7 +346,7 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
           🔫 {opponentName} · {formatCoins(duel.stake)}
         </Text>
       </View>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <Panel style={styles.table}>
           <Scene opponent={opponentName} holder={holder} shots={table?.shots ?? 0} flash={flash} dead={dead} />
           {table && !coinDone && <Coin win={table.coin === seat} spinning />}
@@ -364,7 +364,7 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
           <BigButton label="ДО ДРУЗІВ" onPress={onClose} />
         ) : null}
         <Rules />
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -372,21 +372,21 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
 const styles = StyleSheet.create({
   root: { gap: 12, alignItems: 'center', width: '100%' },
   flex: { flex: 1 },
-  content: { padding: 16, gap: 12, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  content: { padding: 12, paddingBottom: 32, gap: 10, width: '100%', maxWidth: 560, alignSelf: 'center' },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { color: colors.gold, fontSize: 16, fontWeight: '800' },
   barTitle: { color: colors.text, fontSize: 16, fontWeight: '900', flex: 1 },
-  table: { alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#1A0B0B', borderColor: '#7F1D1D', borderWidth: 2, paddingVertical: 18 },
+  table: { alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#1A0B0B', borderColor: '#7F1D1D', borderWidth: 2, paddingVertical: 10 },
   scene: { alignItems: 'center', gap: 10, width: '100%' },
   person: { alignItems: 'center' },
-  silhouette: { fontSize: 64, opacity: 0.9 },
-  me: { fontSize: 56 },
+  silhouette: { fontSize: 46, opacity: 0.9 },
+  me: { fontSize: 42 },
   dead: { opacity: 1 },
   personName: { color: colors.muted, fontWeight: '800', fontSize: 12, maxWidth: 200 },
-  gunRow: { height: 110, alignItems: 'center', justifyContent: 'center' },
+  gunRow: { height: 84, alignItems: 'center', justifyContent: 'center' },
   arrow: { color: colors.red, fontSize: 26, fontWeight: '900', lineHeight: 28 },
   aimText: { color: colors.red, fontSize: 12, fontWeight: '800' },
-  gun: { fontSize: 52 },
+  gun: { fontSize: 40 },
   flash: { position: 'absolute', right: -90, color: colors.gold, fontSize: 20, fontWeight: '900' },
   drum: { flexDirection: 'row', gap: 6 },
   chamber: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#D4A72C', borderWidth: 2, borderColor: '#FDE68A' },
