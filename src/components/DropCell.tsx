@@ -5,6 +5,7 @@ import { getSettings } from '../audio/sound';
 /** Клітинка, що падає на своє місце зверху і «лопається», коли виграла. */
 export function DropCell({
   row,
+  col = 0,
   step,
   size,
   popping,
@@ -13,6 +14,8 @@ export function DropCell({
   children,
 }: {
   row: number;
+  /** Стовпець: падають по черзі зліва направо. */
+  col?: number;
   step: number;
   size: number;
   popping: boolean;
@@ -29,8 +32,8 @@ export function DropCell({
     prevRow.current = row;
     if (from === 0 || getSettings().lite) return;
     y.setValue(from);
-    Animated.timing(y, { toValue: 0, duration: 260 + row * 30, easing: Easing.bounce, useNativeDriver: true }).start();
-  }, [row, step, y]);
+    Animated.timing(y, { toValue: 0, duration: 280 + row * 30, delay: col * 60, easing: Easing.bounce, useNativeDriver: true }).start();
+  }, [row, col, step, y]);
 
   useEffect(() => {
     if (popping) {

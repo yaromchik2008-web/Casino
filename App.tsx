@@ -6,7 +6,8 @@ import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View } fr
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { getSettings, initSound, playMusic, resumeMusic } from './src/audio/sound';
 import { CelebrationLayer } from './src/components/Celebration';
-import { findGame } from './src/games/catalog';
+import { GAMES, findGame } from './src/games/catalog';
+import { preloadArt } from './src/components/CanvasReels';
 import type { Tab } from './src/navigation';
 import { BonusesScreen } from './src/screens/BonusesScreen';
 import { FriendsScreen } from './src/screens/FriendsScreen';
@@ -84,6 +85,13 @@ function Shell() {
   useFriendSync();
   const keyboard = useKeyboardViewport();
 
+  // Картинки слотів вантажимо у фоні одразу після старту, щоб у грі вони вже були готові.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const t = setTimeout(() => preloadArt(GAMES.flatMap((g) => Object.values(g.art ?? {}))), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     initSound();
     playMusic('lobby');
@@ -146,6 +154,52 @@ function Shell() {
     wallet.openGame(id);
     setGameId(id);
   };
+
+  // Свайпи (у браузері й Telegram): вправо — назад, вліво/вправо в меню — сусідній розділ.
+  const nav = useRef({ tab, gameId, back });
+  nav.current = { tab, gameId, back };
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    let start: { x: number; y: number; t: number; ok: boolean } | null = null;
+    // Не заважаємо горизонтальним стрічкам, полям вводу й ігровим полям на канвасі.
+    const blocked = (el: EventTarget | null) => {
+      for (let n = el as HTMLElement | null; n && n !== document.body; n = n.parentElement) {
+        if (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA' || n.tagName === 'CANVAS') return true;
+        const ox = getComputedStyle(n).overflowX;
+        if ((ox === 'auto' || ox === 'scroll') && n.scrollWidth > n.clientWidth + 2) return true;
+      }
+      return false;
+    };
+    const onStart = (e: TouchEvent) => {
+      const p = e.touches[0];
+      start = e.touches.length === 1 ? { x: p.clientX, y: p.clientY, t: Date.now(), ok: !blocked(e.target) } : null;
+    };
+    const onEnd = (e: TouchEvent) => {
+      const s = start;
+      start = null;
+      if (!s || !s.ok) return;
+      const p = e.changedTouches[0];
+      const dx = p.clientX - s.x;
+      const dy = p.clientY - s.y;
+      if (Math.abs(dx) < 80 || Math.abs(dy) > Math.abs(dx) * 0.5 || Date.now() - s.t > 700) return;
+      const { tab: cur, gameId: g, back: goBack } = nav.current;
+      if (g) {
+        // У грі свайп вправо від лівого краю виходить у лобі.
+        if (dx > 0 && s.x < 60) goBack();
+        return;
+      }
+      const i = TABS.findIndex((t) => t.id === (cur === 'tournaments' ? 'bonuses' : cur));
+      const next = TABS[i + (dx < 0 ? 1 : -1)];
+      if (next) setTab(next.id);
+      else if (dx > 0) goBack();
+    };
+    document.addEventListener('touchstart', onStart, { passive: true });
+    document.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchend', onEnd);
+    };
+  }, []);
 
   if (wallet.banned) {
     const forever = new Date(wallet.banned.until).getFullYear() > 9000 || !isFinite(new Date(wallet.banned.until).getTime());

@@ -40,6 +40,15 @@ function imageOf(src: unknown): Img | null {
   return im.complete && im.naturalWidth ? im : null;
 }
 
+/** Завантажує картинки слотів заздалегідь, щоб при вході в гру не було порожніх клітинок. */
+export function preloadArt(srcs: unknown[]) {
+  if (typeof document === 'undefined') return;
+  for (const src of srcs) {
+    const im = imgCache.get(src) ?? (imageOf(src), imgCache.get(src));
+    im?.decode?.().catch(() => {});
+  }
+}
+
 // Емодзі малюються повільно, тож кожен символ рендеримо один раз у маленький канвас.
 const emojiCache = new Map<string, HTMLCanvasElement>();
 function emojiOf(e: string, px: number) {
@@ -124,7 +133,13 @@ export function CanvasReels(props: Props) {
       if (src) {
         const im = imageOf(src);
         if (im) ctx.drawImage(im, x + 3, y + 3, cell - 6, cell - 6);
-        else waiting = true; // картинка ще вантажиться: перемалюємо, коли буде
+        else {
+          // Картинка ще вантажиться: поки малюємо емодзі символу, а потім перемалюємо.
+          waiting = true;
+          const e = emojiOf(sym.emoji, Math.round(q.size * 0.55 * dpr));
+          const d = cell * 0.78;
+          ctx.drawImage(e, x + (cell - d) / 2, y + (cell - d) / 2, d, d);
+        }
       } else {
         const e = emojiOf(sym.emoji, Math.round(q.size * 0.55 * dpr));
         const d = cell * 0.78;

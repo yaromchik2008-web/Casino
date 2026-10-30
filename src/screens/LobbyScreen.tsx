@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useState } from 'react';
+import { ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { GameTile } from '../components/GameTile';
 import { CATEGORIES, Category, GAMES, GameInfo, findGame } from '../games/catalog';
@@ -150,19 +150,7 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
 
   return (
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={{ width: contentWidth }}>
-        {banners.map((b) => (
-          <Pressable key={b.title} onPress={b.action} style={{ width: contentWidth }}>
-            <LinearGradient colors={b.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.banner}>
-              <View style={styles.bannerText}>
-                <Text style={styles.bannerTitle}>{b.title}</Text>
-                <Text style={styles.bannerSub}>{b.text}</Text>
-              </View>
-              {b.image ? <Image source={b.image} style={styles.bannerImage} /> : <Text style={styles.bannerEmoji}>{b.emoji}</Text>}
-            </LinearGradient>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <BannerStrip banners={banners} width={contentWidth} />
 
       <TextInput
         value={query}
@@ -229,6 +217,63 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <Text style={styles.sectionTitle}>{title}</Text>
       {children}
     </View>
+  );
+}
+
+// Стрічка новин сама повільно біжить по екрану. Якщо гравець торкнувся, вона чекає кілька секунд.
+const MARQUEE_PX_PER_S = 28;
+
+function BannerStrip({
+  banners,
+  width,
+}: {
+  banners: { title: string; text: string; colors: readonly [string, string]; emoji: string; image?: ImageSourcePropType; action: () => void }[];
+  width: number;
+}) {
+  const ref = useRef<ComponentRef<typeof ScrollView>>(null);
+  const x = useRef(0);
+  const pausedUntil = useRef(0);
+  const cardW = Math.round(width * 0.86);
+  const loopW = banners.length * (cardW + 10);
+  useEffect(() => {
+    let last = Date.now();
+    const t = setInterval(() => {
+      const now = Date.now();
+      const dt = now - last;
+      last = now;
+      if (now < pausedUntil.current || !ref.current) return;
+      x.current += (MARQUEE_PX_PER_S * dt) / 1000;
+      if (x.current >= loopW) x.current -= loopW; // друга копія стрічки така сама, тож стрибок непомітний
+      ref.current.scrollTo({ x: x.current, animated: false });
+    }, 33);
+    return () => clearInterval(t);
+  }, [loopW]);
+  const hold = () => (pausedUntil.current = Date.now() + 4000);
+  return (
+    <ScrollView
+      ref={ref}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ width }}
+      scrollEventThrottle={32}
+      onTouchStart={hold}
+      onScrollBeginDrag={hold}
+      onScroll={(e) => {
+        if (Date.now() < pausedUntil.current) x.current = e.nativeEvent.contentOffset.x % loopW;
+      }}
+    >
+      {[...banners, ...banners].map((b, i) => (
+        <Pressable key={`${b.title}-${i}`} onPress={b.action} style={{ width: cardW, marginRight: 10 }}>
+          <LinearGradient colors={b.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.banner}>
+            <View style={styles.bannerText}>
+              <Text style={styles.bannerTitle}>{b.title}</Text>
+              <Text style={styles.bannerSub}>{b.text}</Text>
+            </View>
+            {b.image ? <Image source={b.image} style={styles.bannerImage} /> : <Text style={styles.bannerEmoji}>{b.emoji}</Text>}
+          </LinearGradient>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 

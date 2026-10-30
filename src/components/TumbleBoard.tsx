@@ -11,6 +11,8 @@ interface Track {
   ms: number;
 }
 
+export const COL_DELAY = 60;
+
 const bounce = (t: number) => {
   // Та сама крива, що Easing.bounce у RN.
   if (t < 1 / 2.75) return 7.5625 * t * t;
@@ -46,13 +48,14 @@ export function TumbleBoard({
 
   // Нове поле: кожна клітинка падає з того місця, де була (або згори, якщо нова).
   const seen = new Map<number, number>();
-  grid.forEach((col) =>
+  // Стовпці рушають по черзі зліва направо, тож видно, як лавина котиться полем.
+  grid.forEach((col, ci) =>
     col.forEach((c, r) => {
       seen.set(c.key, r);
       const prev = s.rowOf.get(c.key);
       if (prev === r) return;
       const from = prev === undefined ? -(r + 1.5) * step : (prev - r) * step;
-      if (!lite) s.tracks.set(c.key, { fromY: from, at: now0, ms: 260 + r * 30 });
+      if (!lite) s.tracks.set(c.key, { fromY: from, at: now0 + ci * COL_DELAY, ms: 280 + r * 30 });
     }),
   );
   s.rowOf = seen;
@@ -68,7 +71,7 @@ export function TumbleBoard({
         let dy = 0;
         const tr = s.tracks.get(c.key);
         if (tr) {
-          const t = Math.min(1, (now - tr.at) / tr.ms);
+          const t = Math.max(0, Math.min(1, (now - tr.at) / tr.ms));
           dy = tr.fromY * (1 - bounce(t));
           if (t >= 1) s.tracks.delete(c.key);
           else busyAnim = true;

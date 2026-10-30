@@ -28,6 +28,8 @@ export function TumbleGame({ game }: { game: GameInfo }) {
   const [inBonus, setInBonus] = useState(false);
   const [auto, setAuto] = useState(0);
   const [mult, setMult] = useState<number | null>(null);
+  // Скільки приніс останній фриспін і з яким множником (показуємо поруч із загальним виграшем бонусу).
+  const [spinWin, setSpinWin] = useState<{ amount: number; mult: number | null }>({ amount: 0, mult: null });
   const [lastWin, setLastWin] = useState({ amount: 0, key: 0 });
   const [message, setMessage] = useState({ text: 'Збери 8+ однакових!', tone: 'neutral' as 'win' | 'lose' | 'neutral' });
   const alive = useRef(true);
@@ -77,6 +79,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
     }
     setBusy(true);
     setMult(null);
+    if (free) setSpinWin({ amount: 0, mult: null });
     if (free) setFreeSpins((n) => n - 1);
     setMessage({ text: free ? `Фриспін! Залишилось ${freeSpins - 1}` : 'Крутимо...', tone: 'neutral' });
     sfx('spin', 0.5);
@@ -86,7 +89,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
       if (!alive.current) return;
       setRemove(null);
       setGrid(stage.grid);
-      await sleep(520 * speed);
+      await sleep((460 + COLS * 60) * speed);
       if (!stage.wins.length) break;
       setRemove(stage.remove);
       running += stage.win;
@@ -112,6 +115,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
       if (free) {
         bonusRef.current.win += total;
         setBonusWin(bonusRef.current.win);
+        setSpinWin({ amount: total, mult: result.bombs.length ? result.bombs.reduce((x, b) => x + b, 0) : null });
       }
       setMessage({ text: `+${formatCoins(total)}`, tone: 'win' });
       if (winTier(total, bet)) {
@@ -158,8 +162,21 @@ export function TumbleGame({ game }: { game: GameInfo }) {
     <View style={styles.root}>
       {inBonus && (
         <View style={[styles.bonusBar, { borderColor: game.colors[0] }]}>
-          <Text style={styles.bonusText}>ФРИСПІНИ: {freeSpins}</Text>
-          <Text style={styles.bonusText}>БОНУС: {formatCoins(bonusWin)}</Text>
+          <View style={styles.bonusCell}>
+            <Text style={styles.bonusLabel}>ФРИСПІНИ</Text>
+            <Text style={styles.bonusText}>{freeSpins}</Text>
+          </View>
+          <View style={styles.bonusCell}>
+            <Text style={styles.bonusLabel}>ВИГРАШ БОНУСУ</Text>
+            <Text style={styles.bonusText}>{formatCoins(bonusWin)}</Text>
+          </View>
+          <View style={styles.bonusCell}>
+            <Text style={styles.bonusLabel}>ЦЕЙ СПІН</Text>
+            <Text style={styles.bonusText}>
+              {spinWin.amount ? `+${formatCoins(spinWin.amount)}` : '—'}
+              {spinWin.mult ? ` ×${spinWin.mult}` : ''}
+            </Text>
+          </View>
         </View>
       )}
       <View style={[styles.machine, { borderColor: game.colors[0], backgroundColor: game.colors[1] }]}>
@@ -173,6 +190,7 @@ export function TumbleGame({ game }: { game: GameInfo }) {
                 <DropCell
                   key={cell.key}
                   row={ri}
+                  col={ci}
                   step={size + 4}
                   size={size}
                   popping={!!remove?.[ci][ri]}
@@ -237,6 +255,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   bonusText: { color: colors.gold, fontWeight: '900' },
+  bonusCell: { alignItems: 'center', flex: 1 },
+  bonusLabel: { color: colors.muted, fontSize: 9, fontWeight: '800' },
   machine: { padding: 8, borderRadius: 20, borderWidth: 4, overflow: 'hidden' },
   cols: { flexDirection: 'row', gap: 4 },
   col: { gap: 4, overflow: 'visible' },

@@ -50,6 +50,10 @@ export function SlotGame({ game }: { game: GameInfo }) {
   const feature = wheelBonus ? undefined : config.feature;
   const fsState = useRef<FsState>(newFsState(config));
   const [fsMult, setFsMult] = useState(1);
+  // Табло бонуски: загальний виграш і що приніс останній фриспін (з множником).
+  const [fsTotal, setFsTotal] = useState(0);
+  const [fsLast, setFsLast] = useState<{ amount: number; mult: number }>({ amount: 0, mult: 1 });
+  const [fsActive, setFsActive] = useState(false);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
@@ -64,6 +68,8 @@ export function SlotGame({ game }: { game: GameInfo }) {
       return;
     }
     if (free) setFreeSpins((n) => n - 1);
+    if (free) setFsLast({ amount: 0, mult: 1 });
+    else setFsActive(false); // табло бонуски лишається до першого платного оберту
     const karasFree = free && wheelBonus;
     const fsSpin = free && feature ? featureSpin(config, fsState.current) : null;
     const result = fsSpin ? fsSpin.grid : spinGrid(config, Math.random, free);
@@ -144,6 +150,10 @@ export function SlotGame({ game }: { game: GameInfo }) {
           sfx('win');
         } else if (outcome.win > 0) {
           wallet.win(game.id, outcome.win);
+          if (free) {
+            setFsTotal((t) => t + outcome.win);
+            setFsLast({ amount: outcome.win, mult });
+          }
           parts.push(mult > 1 ? `×${mult}! +${formatCoins(outcome.win)}` : `+${formatCoins(outcome.win)}`);
           setLastWin((w) => ({ amount: outcome.win, key: w.key + 1 }));
           if (winTier(outcome.win, bet)) {
@@ -171,6 +181,9 @@ export function SlotGame({ game }: { game: GameInfo }) {
         } else if (outcome.freeSpins > 0 && !wheelBonus && !free) {
           fsState.current = newFsState(config);
           setFsMult(1);
+          setFsTotal(0);
+          setFsLast({ amount: 0, mult: 1 });
+          setFsActive(true);
           setFreeSpins((n) => n + outcome.freeSpins);
           setAuto(0);
           wallet.track('bonuses');
@@ -272,11 +285,29 @@ export function SlotGame({ game }: { game: GameInfo }) {
           ))}
         </View>
         )}
+        {fsActive && !wheelBonus && (
+          <View style={styles.fsBoard}>
+            <View style={styles.fsCell}>
+              <Text style={styles.fsLabel}>ФРИСПІНИ</Text>
+              <Text style={styles.fsValue}>{freeSpins}</Text>
+            </View>
+            <View style={styles.fsCell}>
+              <Text style={styles.fsLabel}>ВИГРАШ БОНУСУ</Text>
+              <Text style={styles.fsValue}>{formatCoins(fsTotal)}</Text>
+            </View>
+            <View style={styles.fsCell}>
+              <Text style={styles.fsLabel}>ЦЕЙ СПІН</Text>
+              <Text style={styles.fsValue}>
+                {busy ? '…' : fsLast.amount ? `+${formatCoins(fsLast.amount)}` : '—'}
+                {!busy && fsLast.amount && fsLast.mult > 1 ? ` ×${fsLast.mult}` : ''}
+              </Text>
+            </View>
+          </View>
+        )}
         {freeSpins > 0 && (
           <Text style={styles.free}>
-            Фриспіни: {freeSpins}
-            {wheelBonus ? ` · Банк: ${formatCoins(bank)}` : ''}
-            {feature ? ` · ${FEATURE_INFO[feature].emoji} ${FEATURE_INFO[feature].title}` : ''}
+            {wheelBonus ? `Фриспіни: ${freeSpins} · Банк: ${formatCoins(bank)}` : ''}
+            {feature ? `${FEATURE_INFO[feature].emoji} ${FEATURE_INFO[feature].title}` : ''}
             {feature === 'mystery' ? ` ${config.symbols.find((x) => x.id === fsState.current.mystery)?.emoji ?? ''}` : ''}
             {(feature === 'ladder' || feature === 'randomMult' || feature === 'double') && fsMult > 1 ? ` · ×${fsMult}` : ''}
           </Text>
@@ -357,6 +388,19 @@ const styles = StyleSheet.create({
   cellWin: { borderColor: colors.gold, backgroundColor: '#FFF3C4' },
   blur: { opacity: 0.55 },
   free: { color: colors.gold, fontWeight: '800', marginTop: 8 },
+  fsBoard: {
+    flexDirection: 'row',
+    alignSelf: 'stretch',
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingVertical: 6,
+  },
+  fsCell: { flex: 1, alignItems: 'center' },
+  fsLabel: { color: colors.muted, fontSize: 9, fontWeight: '800' },
+  fsValue: { color: colors.gold, fontSize: 14, fontWeight: '900' },
   autoRow: { flexDirection: 'row', gap: 10 },
   paytable: { width: '100%', backgroundColor: colors.surface, borderRadius: 16, padding: 12, gap: 4 },
   payTitle: { color: colors.muted, fontSize: 12, fontWeight: '700', marginBottom: 4 },
