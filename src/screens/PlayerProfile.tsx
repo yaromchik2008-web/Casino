@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BigButton, Panel } from '../components/ui';
 import { Profile, fetchProfile, friendlyError } from '../state/friends';
-import { SHOP_CATEGORIES, assetsValue, findItem, hourlyIncome } from '../state/shop';
+import { SHOP_CATEGORIES, assetsValue, findItem, hourlyIncome, topCar } from '../state/shop';
 import { colors, formatCoins } from '../theme';
 
 /** Профіль іншого гравця: статус, рахунок і все його майно. */
@@ -30,6 +30,11 @@ export function PlayerProfile({ id, name, onClose }: { id: string; name?: string
             {p && (
               <Text style={styles.muted}>
                 {p.status.split(' ').slice(1).join(' ') || 'Гравець'} · ⭐ рівень {p.level} · код {p.code}
+              </Text>
+            )}
+            {p?.plate && topCar(owned) && (
+              <Text style={styles.carPlate}>
+                {topCar(owned)!.emoji} {topCar(owned)!.title} · {p.plate}
               </Text>
             )}
             {error && <Text style={styles.error}>{error}</Text>}
@@ -82,6 +87,7 @@ function Stat({ label, value, gold }: { label: string; value: string; gold?: boo
 }
 
 const styles = StyleSheet.create({
+  carPlate: { color: colors.gold, fontWeight: '900', fontSize: 14, textAlign: 'center' },
   back: { flex: 1, backgroundColor: 'rgba(5,3,15,0.8)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   card: { width: '100%', maxWidth: 440, maxHeight: '90%', backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.border },
   inner: { padding: 16, gap: 10, alignItems: 'stretch' },

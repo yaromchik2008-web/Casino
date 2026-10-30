@@ -87,6 +87,8 @@ export interface PlayerState {
   // Турнір на 6 годин: в якому раунді граю і скільки заробив (виграші мінус ставки).
   tourney?: { round: number; net: number };
   xpV: number;
+  /** Номери з «Автономерів»: id — сам номер, value — за скільки продається. */
+  plates?: { id: string; value: number }[];
 }
 
 function initialState(): PlayerState {
@@ -169,6 +171,9 @@ interface WalletApi {
   grantItem: (id: string) => 'item' | 'cash' | 'none';
   /** Команда з термінала розробника (баланс, майно, рівень, повідомлення). */
   adminApply: (a: AdminAction) => void;
+  addPlate: (id: string, value: number) => void;
+  /** Прибирає номер з майна і зараховує його ціну. */
+  sellPlate: (id: string) => number;
   /** Блокування від розробника: до якого часу і за що. */
   banned: { until: string; note: string | null } | null;
   openGame: (gameId: string) => void;
@@ -734,6 +739,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit, notify],
   );
 
+  const addPlate = useCallback(
+    (id: string, value: number) =>
+      commit((p) => ((p.plates ?? []).some((x) => x.id === id) ? p : { ...p, plates: [...(p.plates ?? []), { id, value }] })),
+    [commit],
+  );
+
+  const sellPlate = useCallback(
+    (id: string) => {
+      const pl = (stateRef.current.plates ?? []).find((x) => x.id === id);
+      if (!pl) return 0;
+      commit((p) => ({
+        ...p,
+        balance: p.balance + pl.value,
+        plates: (p.plates ?? []).filter((x) => x.id !== id),
+        stats: { ...p.stats, platesSold: (p.stats.platesSold ?? 0) + 1 },
+      }));
+      return pl.value;
+    },
+    [commit],
+  );
+
   const enterTourney = useCallback(
     (round: number) => commit((p) => ({ ...p, tourney: { round, net: 0 } })),
     [commit],
@@ -776,6 +802,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         enterTourney,
         grantItem,
         adminApply,
+        addPlate,
+        sellPlate,
         banned,
         openGame,
         reset,

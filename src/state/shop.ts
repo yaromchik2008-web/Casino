@@ -130,3 +130,11 @@ export function statusFor(netWorth: number) {
   for (const x of STATUSES) if (netWorth >= x.min) s = x;
   return s;
 }
+
+/** Найдорожчий транспорт гравця (для підпису «авто + номер» у профілі). */
+export function topCar(owned: string[]) {
+  return owned
+    .map(findItem)
+    .filter((i): i is ShopItem => !!i && i.category === 'car')
+    .sort((a, b) => b.price - a.price)[0];
+}

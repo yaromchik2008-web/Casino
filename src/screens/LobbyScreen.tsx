@@ -60,6 +60,20 @@ export function LobbyScreen({ onOpenGame, onNavigate }: { onOpenGame: (id: strin
       action: () => onNavigate('bonuses'),
     },
     {
+      title: 'Нове: Автономера',
+      text: 'Вибий номер 0001, 7777 або VIKTOR за 96 000 ₴. Кожен номер лише один',
+      colors: ['#1D4ED8', '#0B1638'] as const,
+      emoji: '🚘',
+      action: () => onOpenGame('avtonomera'),
+    },
+    {
+      title: 'Нове: Смертельна рулетка',
+      text: 'Один патрон, шість камор. З ботом або дуеллю з другом',
+      colors: ['#B91C1C', '#1A0B0B'] as const,
+      emoji: '🔫',
+      action: () => onOpenGame('smertelna-ruletka'),
+    },
+    {
       title: 'Нове: Золотий Карась',
       text: 'Наш фірмовий слот з друзями-персонажами і фриспінами',
       colors: ['#FFC83D', '#14102A'] as const,

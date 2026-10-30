@@ -23,6 +23,8 @@ export type GameKind =
   | 'colorwheel'
   | 'chicken'
   | 'plane'
+  | 'plates'
+  | 'deathroulette'
   | 'durak';
 
 export type Category = 'popular' | 'new' | 'slots' | 'special' | 'jackpot' | 'fast' | 'table';
@@ -341,6 +343,28 @@ export const GAMES: GameInfo[] = [
     categories: ['fast', 'new', 'popular'],
     tag: 'NEW',
     description: 'Кирка падає в шахту без дна й ламає блоки, поки має HP. Розбивай жили руди, підривай динаміт і лови ящики покращення.',
+  },
+  {
+    id: 'avtonomera',
+    music: 'lobby',
+    title: 'Автономера',
+    emoji: '🚘',
+    colors: ['#1D4ED8', '#FACC15'],
+    kind: 'plates',
+    categories: ['special', 'new', 'popular'],
+    tag: 'NEW',
+    description: 'Крути і вибивай український номер. 0001, 7777 чи іменний VIKTOR коштують 96 000 ₴. Кожен номер у грі лише один: забери в майно або одразу продай.',
+  },
+  {
+    id: 'smertelna-ruletka',
+    music: 'lobby',
+    title: 'Смертельна рулетка',
+    emoji: '🔫',
+    colors: ['#7F1D1D', '#111827'],
+    kind: 'deathroulette',
+    categories: ['fast', 'new'],
+    tag: 'NEW',
+    description: 'Револьвер з одним патроном. Монетка вирішує, хто стріляє першим. Вистрілив у суперника й влучив: забираєш банк. «В себе» і порожньо: +10 ₴. З другом — у дуелях.',
   },
   {
     id: 'potuzhnolit',

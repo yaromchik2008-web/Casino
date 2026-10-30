@@ -8,6 +8,7 @@ import { useNow } from '../components/useNow';
 import { GameInfo, findGame } from '../games/catalog';
 import { MineGame } from '../games/MineGame';
 import { OnlineDurak } from '../games/DurakGame';
+import { RouletteDuel } from '../games/DeathRoulette';
 import { Grid, evaluateGrid, randomSymbol, spinGrid } from '../games/slotEngine';
 import {
   Duel,
@@ -29,7 +30,9 @@ export const DUEL_GAMES: { id: string; rounds: string }[] = [
   { id: 'golden-karas', rounds: '5 обертів' },
   { id: 'durak', rounds: 'Одна партія на 36 карт' },
   { id: 'number', rounds: 'Одне число від 1 до 99' },
+  { id: 'roulette', rounds: 'Револьвер з одним патроном' },
 ];
+const ROULETTE_DUEL = 'roulette';
 // «Число» не є грою в лобі, тому має свою назву.
 const NUMBER_DUEL = 'number';
 // Слоти в дуелі: 5 обертів, шахта: один заїзд.
@@ -42,6 +45,7 @@ export const ROUND_MS = 60_000;
 
 function gameTitle(id: string) {
   if (id === NUMBER_DUEL) return '🎲 Число 1–99';
+  if (id === ROULETTE_DUEL) return '🔫 Смертельна рулетка';
   const g = findGame(id);
   return g ? `${g.emoji} ${g.title}` : id;
 }
@@ -76,7 +80,9 @@ export function DuelSetup({ friend, onDone }: { friend: Profile; onDone: (error?
       <Text style={styles.title}>⚔️ Дуель з {friend.name}</Text>
       <Text style={styles.muted}>Обидва ставите однаково. Хто набере більше очок, забирає все. Нічия повертає обом ставку.</Text>
       <Text style={styles.muted}>
-        {game === 'durak' ? 'Дурак: граєте партію одне проти одного, хто не дурак, той виграв.' : game === NUMBER_DUEL ? 'Число: у кожного один кидок від 1 до 99, у кого більше, той виграв.' : 'Карась: по 5 обертів, хто набере більше очок.'}
+        {game === ROULETTE_DUEL
+          ? 'Рулетка: монетка вирішує, хто стріляє першим. Влучив у суперника — забираєш банк, «в себе» і порожньо — +10 ₴.'
+          : game === 'durak' ? 'Дурак: граєте партію одне проти одного, хто не дурак, той виграв.' : game === NUMBER_DUEL ? 'Число: у кожного один кидок від 1 до 99, у кого більше, той виграв.' : 'Карась: по 5 обертів, хто набере більше очок.'}
       </Text>
       <View style={styles.wrap}>
         {DUEL_GAMES.map((g) => (
@@ -193,6 +199,8 @@ export function DuelList({
           line =
             d.game === 'durak'
               ? `Партія в дурака з ${other}. Заходь за стіл!`
+              : d.game === ROULETTE_DUEL
+                ? `Рулетка з ${other}. Заходь, револьвер чекає!`
               : theirs == null
                 ? `${other} теж ще не грав`
                 : `${other} уже зіграв. Твоя черга!`;
@@ -226,6 +234,7 @@ export function DuelList({
 /** Повноекранний раунд дуелі. Результат відправляється одразу після раунду. */
 export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponentName: string; onClose: () => void }) {
   const game = findGame(duel.game);
+  if (duel.game === ROULETTE_DUEL) return <RouletteDuel duel={duel} opponentName={opponentName} onClose={onClose} />;
   if (duel.game === 'durak' && game) return <DurakDuel duel={duel} game={game} opponentName={opponentName} onClose={onClose} />;
   return <ScoreDuelPlay duel={duel} opponentName={opponentName} onClose={onClose} game={game} />;
 }

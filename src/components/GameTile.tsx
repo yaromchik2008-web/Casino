@@ -48,13 +48,19 @@ export function GameTile({
           <Text style={styles.favText}>{favorite ? '❤️' : '🤍'}</Text>
         </Pressable>
         <View style={styles.footer}>
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={[styles.title, { fontSize: titleSize(game.title, width) }]} numberOfLines={2}>
             {game.title}
           </Text>
         </View>
       </LinearGradient>
     </Pressable>
   );
+}
+
+// Довге слово в назві («Смертельна») не має ламатися посередині: зменшуємо шрифт під ширину плитки.
+function titleSize(title: string, width: number) {
+  const longest = Math.max(...title.split(/\s+/).map((w) => w.length));
+  return Math.max(9, Math.min(12, Math.floor((width - 16) / (longest * 0.72))));
 }
 
 const styles = StyleSheet.create({

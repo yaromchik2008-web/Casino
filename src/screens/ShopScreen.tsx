@@ -1,3 +1,5 @@
+import { PlateView } from '../games/PlateGame';
+import { plateRelease } from '../state/friends';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { sfx } from '../audio/sound';
@@ -135,7 +137,31 @@ export function ShopScreen() {
 
       {view === 'mine' && (
         <>
-          {s.owned.length === 0 && <Text style={styles.empty}>Поки нічого немає. Загляни в магазин!</Text>}
+          {s.owned.length === 0 && !(s.plates ?? []).length && <Text style={styles.empty}>Поки нічого немає. Загляни в магазин!</Text>}
+          {!!(s.plates ?? []).length && (
+            <Panel style={styles.group}>
+              <Text style={styles.groupTitle}>🚘 Номери</Text>
+              {[...(s.plates ?? [])]
+                .sort((a, b) => b.value - a.value)
+                .map((pl) => (
+                  <View key={pl.id} style={styles.ownedRow}>
+                    <PlateView text={pl.id} />
+                    <Chip
+                      label={confirmSell === pl.id ? `Продати за ${formatCoins(pl.value)}?` : formatCoins(pl.value)}
+                      active={confirmSell === pl.id}
+                      onPress={() => {
+                        if (confirmSell === pl.id) {
+                          const got = wallet.sellPlate(pl.id);
+                          plateRelease(pl.id).catch(() => {});
+                          wallet.notify(`Номер ${pl.id} продано за ${formatCoins(got)}`);
+                          setConfirmSell(null);
+                        } else setConfirmSell(pl.id);
+                      }}
+                    />
+                  </View>
+                ))}
+            </Panel>
+          )}
           {SHOP_CATEGORIES.map((c) => {
             const items = s.owned.map(findItem).filter((i) => i && i.category === c.id);
             if (!items.length) return null;

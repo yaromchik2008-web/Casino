@@ -5,6 +5,8 @@ import { BigButton, Panel } from '../components/ui';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { findGame } from '../games/catalog';
 import { levelName } from '../state/progress';
+import { topCar } from '../state/shop';
+import { TIERS } from '../games/plateEngine';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 
@@ -27,6 +29,10 @@ export function ProfileScreen({ onOpenGame }: { onOpenGame: (id: string) => void
     { label: 'Серія щоденних входів', value: `${s.dailyStreak} дн.` },
   ];
 
+  // Авто + номер за 96 000 ₴ (за бажанням ghj номер показуємо лише ексклюзивний).
+  const car = topCar(s.owned);
+  const vip = (s.plates ?? []).find((x) => x.value >= TIERS.exclusive.value);
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -36,6 +42,11 @@ export function ProfileScreen({ onOpenGame }: { onOpenGame: (id: string) => void
         <View>
           <Text style={styles.name}>Гравець</Text>
           <Text style={styles.status}>{levelName(s.level)}</Text>
+          {car && vip && (
+            <Text style={styles.status}>
+              {car.emoji} {car.title} · {vip.id}
+            </Text>
+          )}
         </View>
       </View>
       <Panel>

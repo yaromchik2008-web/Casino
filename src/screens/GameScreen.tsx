@@ -15,6 +15,8 @@ import { HoldWinGame } from '../games/HoldWinGame';
 import { MineGame } from '../games/MineGame';
 import { MinesGame } from '../games/MinesGame';
 import { PlaneGame } from '../games/PlaneGame';
+import { PlateGame } from '../games/PlateGame';
+import { DeathRouletteGame } from '../games/DeathRoulette';
 import { PlinkoGame } from '../games/PlinkoGame';
 import { PokerGame } from '../games/PokerGame';
 import { RouletteGame } from '../games/RouletteGame';
@@ -45,6 +47,8 @@ const COMPONENTS: Record<GameKind, ComponentType<{ game: GameInfo }>> = {
   colorwheel: ColorWheelGame,
   chicken: ChickenGame,
   plane: PlaneGame,
+  plates: PlateGame,
+  deathroulette: DeathRouletteGame,
   durak: DurakGame,
 };
 
