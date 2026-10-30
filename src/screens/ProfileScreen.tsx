@@ -7,12 +7,13 @@ import { findGame } from '../games/catalog';
 import { levelName } from '../state/progress';
 import { topCar } from '../state/shop';
 import { TIERS } from '../games/plateEngine';
-import { useWallet } from '../state/WalletContext';
+import { RESET_COOLDOWN_MS, useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
 
 export function ProfileScreen({ onOpenGame }: { onOpenGame: (id: string) => void }) {
   const wallet = useWallet();
   const s = wallet.state;
+  const resetLeft = Math.max(0, (s.lastResetAt ?? 0) + RESET_COOLDOWN_MS - Date.now());
   const [confirmReset, setConfirmReset] = useState(false);
   const top = Object.entries(s.played)
     .sort((a, b) => b[1] - a[1])
@@ -80,8 +81,15 @@ export function ProfileScreen({ onOpenGame }: { onOpenGame: (id: string) => void
         </Text>
       </Panel>
       <BigButton
-        label={confirmReset ? 'ТОЧНО СКИНУТИ? НАТИСНИ ЩЕ РАЗ' : 'Скинути прогрес'}
+        label={
+          resetLeft > 0
+            ? `Скинути можна через ${Math.floor(resetLeft / 3600000)} год ${Math.ceil((resetLeft % 3600000) / 60000)} хв`
+            : confirmReset
+              ? 'ТОЧНО СКИНУТИ? НАТИСНИ ЩЕ РАЗ'
+              : 'Скинути прогрес'
+        }
         color={confirmReset ? colors.red : colors.surfaceAlt}
+        disabled={resetLeft > 0}
         onPress={() => {
           if (confirmReset) {
             wallet.reset();

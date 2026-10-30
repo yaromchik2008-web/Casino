@@ -43,6 +43,7 @@ const PUSH_DELAY_MS = 1500;
 export const START_BALANCE = 30000; // усі суми в копійках: 30000 = 300,00 ₴
 export const HOURLY_BONUS = 2000;
 export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
+export const RESET_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
@@ -79,6 +80,7 @@ export interface PlayerState {
   achievements: string[];
   sportBets: SportBet[];
   promoUsed: string[];
+  lastResetAt?: number;
   // Турнір на 6 годин: в якому раунді граю і скільки заробив (виграші мінус ставки).
   tourney?: { round: number; net: number };
   xpV: number;
@@ -172,7 +174,7 @@ interface WalletApi {
   /** Блокування від розробника: до якого часу і за що. */
   banned: { until: string; note: string | null } | null;
   openGame: (gameId: string) => void;
-  reset: () => void;
+  reset: () => boolean;
 }
 
 const WalletContext = createContext<WalletApi | null>(null);
@@ -749,12 +751,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
-  // Скидання не дає нових грошей і не обнуляє таймери бонусів, інакше його можна крутити по колу.
+  // Скидання дає стартові 300 ₴, але лише раз на 6 годин, і не обнуляє таймери бонусів.
   const reset = useCallback(() => {
     const old = stateRef.current;
+    if (Date.now() - (old.lastResetAt ?? 0) < RESET_COOLDOWN_MS) return false;
     const fresh: PlayerState = {
       ...initialState(),
-      balance: 0,
+      lastResetAt: Date.now(),
       lastHourlyAt: old.lastHourlyAt,
       lastWheelAt: old.lastWheelAt,
       dailyStreak: old.dailyStreak,
@@ -766,7 +769,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
     stateRef.current = fresh;
     setState(fresh);
-    notify('Прогрес скинуто');
+    notify(`Прогрес скинуто. Тримай ${formatCoins(START_BALANCE)}`);
+    return true;
   }, [notify]);
 
   return (

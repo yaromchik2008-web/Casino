@@ -5,7 +5,7 @@
 type Obj = Record<string, unknown>;
 
 // Числа, де беремо більше значення, а не суму змін (час, рівні, серії).
-const MAX_KEYS = new Set(['lastHourlyAt', 'lastWheelAt', 'incomeAt', 'pickaxe', 'dailyStreak', 'level', 'xpV', 'resetAt', 'biggestWin']);
+const MAX_KEYS = new Set(['lastHourlyAt', 'lastWheelAt', 'incomeAt', 'pickaxe', 'dailyStreak', 'level', 'xpV', 'resetAt', 'lastResetAt', 'biggestWin']);
 // Списки, де порядок важливий: беремо локальний.
 const LOCAL_KEYS = new Set(['recent']);
 
