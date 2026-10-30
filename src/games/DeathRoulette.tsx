@@ -23,6 +23,22 @@ const CLAIM_MS = 45_000;
 type Phase = 'idle' | 'coin' | 'aim' | 'shooting' | 'over';
 
 /** Сцена: суперник зверху, ти знизу, револьвер дивиться на того, в кого цілиться. */
+/** Револьвер з простих блоків: у базовому положенні ствол дивиться праворуч. */
+function Revolver({ up }: { up: boolean }) {
+  return (
+    <View style={[styles.revolver, { transform: [{ rotate: up ? '-90deg' : '90deg' }] }]}>
+      <View style={styles.rvBarrel} />
+      <View style={styles.rvSight} />
+      <View style={styles.rvFrame} />
+      <View style={styles.rvCylinder} />
+      <View style={styles.rvHammer} />
+      <View style={styles.rvGuard} />
+      <View style={styles.rvTrigger} />
+      <View style={styles.rvGrip} />
+    </View>
+  );
+}
+
 function Scene({
   opponent,
   holder,
@@ -36,8 +52,12 @@ function Scene({
   flash: 'bang' | 'click' | null;
   dead: 'me' | 'them' | null;
 }) {
-  // Класична російська рулетка: хто тримає револьвер, той приставляє його до себе.
-  const aimAt = holder;
+  // Пістолет лежить біля того, у кого він зараз, і дивиться на суперника (за бажанням ghj, без стрілок).
+  const gun = (side: 'me' | 'them') => (
+    <View style={styles.gunSlot}>
+      {holder === side && <Revolver up={side === 'me'} />}
+    </View>
+  );
   return (
     <View style={styles.scene}>
       <View style={styles.person}>
@@ -46,18 +66,16 @@ function Scene({
           {opponent}
         </Text>
       </View>
-      <View style={styles.gunRow}>
-        {aimAt === 'them' && <Text style={styles.arrow}>⬆</Text>}
-        <Text style={styles.gun}>🔫</Text>
-        {aimAt === 'me' && <Text style={styles.arrow}>⬇</Text>}
-        {flash && <Text style={styles.flash}>{flash === 'bang' ? '💥 БАХ!' : '…клац'}</Text>}
+      {gun('them')}
+      <View style={styles.middleRow}>
+        <View style={styles.drum}>
+          {Array.from({ length: CHAMBERS }, (_, i) => (
+            <View key={i} style={[styles.chamber, i < shots && styles.chamberUsed]} />
+          ))}
+        </View>
+        <Text style={styles.flash}>{flash === 'bang' ? '💥 БАХ!' : flash === 'click' ? '…клац, порожньо' : ' '}</Text>
       </View>
-      {aimAt && <Text style={styles.aimText}>{aimAt === 'them' ? `револьвер у ${opponent}` : 'револьвер у тебе'}</Text>}
-      <View style={styles.drum}>
-        {Array.from({ length: CHAMBERS }, (_, i) => (
-          <View key={i} style={[styles.chamber, i < shots && styles.chamberUsed]} />
-        ))}
-      </View>
+      {gun('me')}
       <View style={styles.person}>
         <Text style={[styles.silhouette, styles.me, dead === 'me' && styles.dead]}>{dead === 'me' ? '💀' : '🧍'}</Text>
         <Text style={styles.personName}>Ти</Text>
@@ -210,8 +228,8 @@ function Rules() {
   return (
     <Panel style={styles.rules}>
       <Text style={styles.rulesTitle}>Правила</Text>
-      <Text style={styles.rule}>Класична російська рулетка. Обидва ставите однаково, монетка WIN / LOSE вирішує, хто тисне на курок першим.</Text>
-      <Text style={styles.rule}>Тиснеш на курок: порожньо — револьвер переходить супернику. Патрон — ти програв, суперник забирає банк.</Text>
+      <Text style={styles.rule}>Обидва ставите однаково. Монетка WIN / LOSE вирішує, у кого револьвер першим.</Text>
+      <Text style={styles.rule}>Стріляєш у суперника: патрон — він падає, ти забираєш банк. Порожньо — револьвер переходить до нього і дивиться на тебе.</Text>
       <Text style={styles.rule}>У барабані 6 камор і 1 патрон, тож з кожним клацанням ризик більший.</Text>
     </Panel>
   );
@@ -317,14 +335,14 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
       : table.status === 'finished'
         ? table.winner === seat
           ? `Перемога! +${formatCoins(table.stake * 2)}${table.last === 'timeout' ? ' (суперник не встиг)' : ''}`
-          : `💀 Патрон! ${opponentName} забирає банк`
+          : `💀 ${opponentName} влучив. Він забирає банк`
         : table.shots === 0
           ? table.coin === seat
             ? 'WIN! Револьвер у тебе'
             : `LOSE. Револьвер у ${opponentName}`
           : myTurn
-            ? `${opponentName}: клац… порожньо. Твій хід`
-            : `Клац… порожньо. Револьвер у ${opponentName}`;
+            ? `${opponentName} промахнувся! Твій постріл`
+            : `Порожньо. Тепер ${opponentName} цілиться в тебе`;
 
   return (
     <View style={styles.flex}>
@@ -343,7 +361,7 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
         </Panel>
         <ResultLine text={error ?? text} tone={table?.status === 'finished' ? (table.winner === seat ? 'win' : 'lose') : 'neutral'} />
         {myTurn ? (
-          <BigButton label="🔫 НАТИСНУТИ НА КУРОК" color={colors.red} disabled={busy} onPress={() => act(true)} />
+          <BigButton label="🎯 ВИСТРІЛИТИ" color={colors.red} disabled={busy} onPress={() => act(false)} />
         ) : playing && coinDone && idle > CLAIM_MS ? (
           <BigButton label="⏱ СУПЕРНИК МОВЧИТЬ: ЗАБРАТИ ПЕРЕМОГУ" onPress={claim} />
         ) : table?.status === 'finished' ? (
@@ -356,6 +374,7 @@ export function RouletteDuel({ duel, opponentName, onClose }: { duel: Duel; oppo
 }
 
 const styles = StyleSheet.create({
+  flash: { color: colors.gold, fontSize: 16, fontWeight: '900', minHeight: 20 },
   root: { gap: 12, alignItems: 'center', width: '100%' },
   flex: { flex: 1 },
   content: { padding: 12, paddingBottom: 32, gap: 10, width: '100%', maxWidth: 560, alignSelf: 'center' },
@@ -369,11 +388,25 @@ const styles = StyleSheet.create({
   me: { fontSize: 42 },
   dead: { opacity: 1 },
   personName: { color: colors.muted, fontWeight: '800', fontSize: 12, maxWidth: 200 },
+  gunSlot: { height: 96, alignItems: 'center', justifyContent: 'center' },
+  revolver: { width: 90, height: 54 },
+  rvBarrel: { position: 'absolute', left: 38, top: 6, width: 52, height: 10, backgroundColor: '#9CA3AF', borderRadius: 2, borderWidth: 1, borderColor: '#374151' },
+  rvSight: { position: 'absolute', left: 84, top: 2, width: 4, height: 5, backgroundColor: '#6B7280' },
+  rvFrame: { position: 'absolute', left: 14, top: 4, width: 30, height: 18, backgroundColor: '#6B7280', borderRadius: 3, borderWidth: 1, borderColor: '#374151' },
+  rvCylinder: { position: 'absolute', left: 22, top: 2, width: 22, height: 20, backgroundColor: '#4B5563', borderRadius: 6, borderWidth: 1, borderColor: '#1F2937' },
+  rvHammer: { position: 'absolute', left: 10, top: 0, width: 8, height: 6, backgroundColor: '#374151', borderRadius: 2 },
+  rvGuard: { position: 'absolute', left: 20, top: 20, width: 18, height: 14, borderWidth: 3, borderTopWidth: 0, borderColor: '#4B5563', borderBottomLeftRadius: 9, borderBottomRightRadius: 9 },
+  rvTrigger: { position: 'absolute', left: 27, top: 20, width: 3, height: 8, backgroundColor: '#1F2937' },
+  rvGrip: { position: 'absolute', left: 2, top: 18, width: 18, height: 34, backgroundColor: '#7C4A1E', borderRadius: 5, borderWidth: 1, borderColor: '#4A2A0E', transform: [{ rotate: '18deg' }] },
+  // Емодзі пістолета дивиться вліво: поворот на 90° за годинниковою — вгору, проти — вниз.
+  gunUp: { transform: [{ rotate: '90deg' }] },
+  gunDown: { transform: [{ rotate: '-90deg' }] },
+  middleRow: { alignItems: 'center', gap: 4 },
   gunRow: { height: 84, alignItems: 'center', justifyContent: 'center' },
   arrow: { color: colors.red, fontSize: 26, fontWeight: '900', lineHeight: 28 },
   aimText: { color: colors.red, fontSize: 12, fontWeight: '800' },
   gun: { fontSize: 40 },
-  flash: { position: 'absolute', right: -90, color: colors.gold, fontSize: 20, fontWeight: '900' },
+  flashOld: { position: 'absolute', right: -90, color: colors.gold, fontSize: 20, fontWeight: '900' },
   drum: { flexDirection: 'row', gap: 6 },
   chamber: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#D4A72C', borderWidth: 2, borderColor: '#FDE68A' },
   chamberUsed: { backgroundColor: 'transparent', borderColor: '#52525B' },
