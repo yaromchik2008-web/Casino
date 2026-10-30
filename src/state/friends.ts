@@ -98,6 +98,7 @@ const ERRORS: Record<string, string> = {
   self: 'Це твій власний код',
   not_friends: 'Ви ще не друзі',
   daily_limit: 'Ліміт: 10 000 ₴ на добу',
+  no_money: 'Недостатньо грошей на сервері',
   bad_amount: 'Невірна сума',
   duel_closed: 'Ця дуель уже закрита',
   already_played: 'Ти вже зіграв свій раунд',
@@ -594,10 +595,31 @@ export async function loadState(rev: number): Promise<CloudState | null> {
   return { ...(data as CloudState), rev: Number((data as CloudState).rev) };
 }
 
-export async function saveState(state: unknown, rev: number): Promise<{ ok: boolean; rev: number; state?: Record<string, unknown> | null }> {
+export async function saveState(state: unknown, rev: number): Promise<{ ok: boolean; clamped?: boolean; rev: number; state?: Record<string, unknown> | null }> {
   const { data, error } = await db().rpc('save_state', { p_state: state, p_rev: rev });
   if (error) throw error;
   return { ...data, rev: Number(data.rev) };
+}
+
+export type PromoResult = { result: 'ok'; amount: number } | { result: 'used'; next: string | null } | { result: 'invalid' } | { result: 'reset' } | { result: 'error'; message: string };
+
+export async function redeemPromoOnServer(code: string): Promise<PromoResult> {
+  if (!friendsEnabled()) return { result: 'error', message: 'Промокоди працюють лише з сервером' };
+  try {
+    if (!me) await startFriends(telegramName() ?? 'Гравець');
+    const { data, error } = await db().rpc('redeem_promo', { p_code: code.trim().toLowerCase() });
+    if (error) throw error;
+    return { ...data, amount: Number(data?.amount ?? 0) } as PromoResult;
+  } catch (e) {
+    const msg = String((e as { message?: string })?.message ?? e);
+    return { result: 'error', message: /redeem_promo/.test(msg) ? 'На сервері ще не запущено SQL з docs/supabase-v15.sql' : friendlyError(e) };
+  }
+}
+
+export async function adminSuspects(): Promise<{ code: string; name: string; tried: number; allowed: number; balance_before: number; created_at: string }[]> {
+  const { data, error } = await db().rpc('admin_suspects');
+  if (error) throw error;
+  return data ?? [];
 }
 
 export function cloudStateOn() {

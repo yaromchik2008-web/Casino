@@ -1,6 +1,6 @@
 import { ComponentRef, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AdminKind, Profile, adminAct, adminPlayers, adminStats, friendlyError, myProfile, takeAdminActions } from '../state/friends';
+import { AdminKind, Profile, adminAct, adminPlayers, adminStats, adminSuspects, friendlyError, myProfile, takeAdminActions } from '../state/friends';
 import { SHOP_ITEMS, findItem } from '../state/shop';
 import { useWallet } from '../state/WalletContext';
 import { formatCoins } from '../theme';
@@ -31,6 +31,7 @@ const HELP = [
   'all ТЕКСТ            — повідомлення всім гравцям',
   'online               — хто зараз у мережі',
   'stats                — статистика гри',
+  'suspects             — хто намагався накрутити гроші',
   'clear                — очистити екран',
   'КОД = me — це ти',
 ];
@@ -237,6 +238,17 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
         try {
           const st = await adminStats();
           out(`гравців ${st.players} · у мережі ${st.online} · за добу ${st.today} · у бані ${st.banned}`, `усього грошей у гравців ${formatCoins(Number(st.coins))}`);
+        } catch (e) {
+          out(`✖ ${friendlyError(e)}`);
+        }
+        break;
+      case 'suspects':
+        try {
+          const list = await adminSuspects();
+          out(
+            ...list.map((x) => `⚠️ ${x.code} ${x.name}: хотів +${formatCoins(Number(x.tried))}, дозволено ${formatCoins(Number(x.allowed))} · ${new Date(x.created_at).toLocaleString('uk-UA')}`),
+            list.length ? `${list.length} записів` : 'нікого',
+          );
         } catch (e) {
           out(`✖ ${friendlyError(e)}`);
         }

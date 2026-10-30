@@ -18,7 +18,7 @@ import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
 import { INCOME_CAP_HOURS, findItem, refundRemoved, hourlyIncome, sellPrice, vehicleBoost } from './shop';
 import { SportBet, SportPick, betResult, getMatch } from './sports';
-import { AdminAction, cloudStateOn, loadState, myProfile, saveState, tourneyRound } from './friends';
+import { AdminAction, PromoResult, cloudStateOn, loadState, myProfile, redeemPromoOnServer, saveState, tourneyRound } from './friends';
 import { merge3 } from './merge';
 import { friendsEnabled } from '../config';
 import { AppState, Platform } from 'react-native';
@@ -46,11 +46,6 @@ export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
-// Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS (за бажанням ghj усі поточні багаторазові).
-const PROMO_CODES: Record<string, number> = { salo: 1000000 };
-const REUSABLE_PROMOS = ['salo', 'ben'];
-// Жартівливі коди, що обнуляють баланс (за бажанням ghj).
-const RESET_PROMOS = ['ben'];
 export const CASHBACK_RATE = 0.02;
 
 export interface PlayerState {
@@ -164,7 +159,7 @@ interface WalletApi {
   buyPickaxe: (level: number) => boolean;
   claimAchievement: (id: string) => number;
   placeSportBet: (picks: SportPick[], stake: number) => boolean;
-  redeemPromo: (code: string) => number | 'used' | 'invalid' | 'reset';
+  redeemPromo: (code: string) => Promise<PromoResult>;
   /** Виставляє баланс, який задав адмін на сервері. */
   setBalance: (amount: number) => void;
   enterTourney: (round: number) => void;
@@ -285,8 +280,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           sc.base = snap;
           remember();
         } else {
+          // Сервер урізав підозрілий виграш: беремо його стан повністю, без злиття.
+          if (r.clamped) sc.base = null;
           absorb(r.rev, r.state);
-          schedule();
+          if (!r.clamped) schedule();
         }
       } catch {
         // Без мережі збережемо наступного разу.
@@ -635,25 +632,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const setBalance = useCallback((amount: number) => commit((p) => ({ ...p, balance: Math.max(0, Math.round(amount)) })), [commit]);
 
-  const redeemPromo = useCallback(
-    (raw: string) => {
-      const code = raw.trim().toLowerCase();
-      if (RESET_PROMOS.includes(code)) {
-        commit((p) => ({ ...p, balance: 0 }));
-        return 'reset' as const;
-      }
-      const amount = PROMO_CODES[code];
-      if (!amount) return 'invalid' as const;
-      if (!REUSABLE_PROMOS.includes(code) && stateRef.current.promoUsed.includes(code)) return 'used' as const;
-      commit((p) => ({
-        ...p,
-        balance: p.balance + amount,
-        promoUsed: p.promoUsed.includes(code) ? p.promoUsed : [...p.promoUsed, code],
-      }));
-      return amount;
-    },
-    [commit],
-  );
+  // Промокоди перевіряє сервер, гроші приходять у серверний стан і підтягуються синхронізацією.
+  const redeemPromo = useCallback(async (raw: string) => {
+    const r = await redeemPromoOnServer(raw);
+    syncNow.current();
+    return r;
+  }, []);
 
   // Приз без оплати. Якщо такий уже є, віддаємо його вартість грошима.
   const grantItem = useCallback(
@@ -765,11 +749,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  // Скидання не дає нових грошей і не обнуляє таймери бонусів, інакше його можна крутити по колу.
   const reset = useCallback(() => {
-    const fresh = initialState();
+    const old = stateRef.current;
+    const fresh: PlayerState = {
+      ...initialState(),
+      balance: 0,
+      lastHourlyAt: old.lastHourlyAt,
+      lastWheelAt: old.lastWheelAt,
+      dailyStreak: old.dailyStreak,
+      lastDailyDay: old.lastDailyDay,
+      lastCashbackDay: old.lastCashbackDay,
+      missionDay: old.missionDay,
+      missionClaimed: old.missionClaimed,
+      promoUsed: old.promoUsed,
+    };
     stateRef.current = fresh;
     setState(fresh);
-    notify(`Прогрес скинуто. Тримай ${formatCoins(START_BALANCE)}`);
+    notify('Прогрес скинуто');
   }, [notify]);
 
   return (

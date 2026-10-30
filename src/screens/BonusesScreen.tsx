@@ -110,20 +110,27 @@ export function BonusesScreen({ onOpenTournaments }: { onOpenTournaments: () => 
                 setTerminal(true);
                 return;
               }
-              const r = wallet.redeemPromo(promo);
-              if (r === 'invalid') setPromoMsg({ text: 'Такого промокоду немає', ok: false });
-              else if (r === 'used') setPromoMsg({ text: 'Цей промокод ти вже використав', ok: false });
-              else if (r === 'reset') {
-                setPromo('');
-                setPromoMsg({ text: 'Баланс обнулено 😈', ok: false });
-                wallet.notify('🎟️ Промокод ben: баланс обнулено');
-              }
-              else {
-                sfx('cash');
-                setPromo('');
-                setPromoMsg({ text: `Нараховано ${formatCoins(r)}!`, ok: true });
-                wallet.notify(`🎟️ Промокод: +${formatCoins(r)}`);
-              }
+              const code = promo.trim().toLowerCase();
+              setPromoMsg({ text: 'Перевіряємо…', ok: true });
+              wallet.redeemPromo(code).then((r) => {
+                if (r.result === 'invalid') setPromoMsg({ text: 'Такого промокоду немає', ok: false });
+                else if (r.result === 'used')
+                  setPromoMsg({
+                    text: r.next ? `Знову можна о ${new Date(r.next).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}` : 'Цей промокод ти вже використав',
+                    ok: false,
+                  });
+                else if (r.result === 'error') setPromoMsg({ text: r.message, ok: false });
+                else if (r.result === 'reset') {
+                  setPromo('');
+                  setPromoMsg({ text: 'Баланс обнулено 😈', ok: false });
+                  wallet.notify(`🎟️ Промокод ${code}: баланс обнулено`);
+                } else {
+                  sfx('cash');
+                  setPromo('');
+                  setPromoMsg({ text: `Нараховано ${formatCoins(r.amount)}!`, ok: true });
+                  wallet.notify(`🎟️ Промокод: +${formatCoins(r.amount)}`);
+                }
+              });
             }}
           />
         </View>
