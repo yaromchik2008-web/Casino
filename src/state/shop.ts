@@ -20,7 +20,21 @@ export const REMOVED_ITEMS: Record<string, number> = {
   'phone-smart': 500 * UAH,
   'phone-pro': 2500 * UAH,
   'phone-fold': 6000 * UAH,
+  // Старий транспорт, якого немає в новому списку (за бажанням ghj): повертаємо повну ціну.
+  'moto-alpha': 18000 * UAH,
+  'moto-forte': 42000 * UAH,
+  'car-old': 8000 * UAH,
+  'car-suv': 450000 * UAH,
+  'car-sport': 1500000 * UAH,
+  'car-yacht': 3000000 * UAH,
 };
+
+/** Прибирає з майна зняті з продажу речі й повертає за них гроші. */
+export function refundRemoved<T extends { owned: string[]; balance: number }>(s: T): { state: T; refund: number } {
+  const refund = s.owned.reduce((sum, id) => sum + (REMOVED_ITEMS[id] ?? 0), 0);
+  if (!refund) return { state: s, refund: 0 };
+  return { state: { ...s, owned: s.owned.filter((id) => !(id in REMOVED_ITEMS)), balance: s.balance + refund }, refund };
+}
 
 export const SHOP_CATEGORIES: { id: ItemCategory; label: string; icon: string }[] = [
   { id: 'home', label: 'Житло', icon: '🏠' },
@@ -30,20 +44,26 @@ export const SHOP_CATEGORIES: { id: ItemCategory; label: string; icon: string }[
 
 export const SHOP_ITEMS: ShopItem[] = [
 
-  { id: 'car-bike', title: 'Велосипед', emoji: '🚲', category: 'car', price: 300 * UAH },
-  { id: 'car-scooter', title: 'Скутер', emoji: '🛵', category: 'car', price: 1500 * UAH },
-  { id: 'moto-alpha', title: 'Мопед Альфа 110 кубів', emoji: '🛵', category: 'car', price: 18000 * UAH },
-  { id: 'moto-prus', title: 'Прус', emoji: '🏍️', category: 'car', price: 25000 * UAH },
-  { id: 'moto-forte', title: 'Forte 200 кубів', emoji: '🏍️', category: 'car', price: 42000 * UAH },
-  { id: 'car-old', title: 'Вживана легківка', emoji: '🚗', category: 'car', price: 8000 * UAH },
-  { id: 'car-vaz', title: 'ВАЗ 2107', emoji: '🚗', category: 'car', price: 35000 * UAH },
-  { id: 'car-doblo', title: 'Fiat Doblo', emoji: '🚐', category: 'car', price: 220000 * UAH },
-  { id: 'car-megane', title: 'Renault Megane', emoji: '🚘', category: 'car', price: 280000 * UAH },
-  { id: 'car-suv', title: 'Кросовер', emoji: '🚙', category: 'car', price: 450000 * UAH },
-  { id: 'car-sport', title: 'Спорткар', emoji: '🏎️', category: 'car', price: 1500000 * UAH },
+  // Ціни як на ринку України (жовтень 2026, вживані, де модель уже не випускають).
+  { id: 'car-bike', title: 'Велосипед «Славутич»', emoji: '🚲', category: 'car', price: 1500 * UAH },
+  { id: 'car-scooter', title: 'Скутер Honda Dio', emoji: '🛵', category: 'car', price: 15000 * UAH },
+  { id: 'moto-prus', title: 'Мотоцикл Loncin Pruss 200', emoji: '🏍️', category: 'car', price: 45000 * UAH },
+  { id: 'car-vaz', title: 'ВАЗ-21099', emoji: '🚗', category: 'car', price: 60000 * UAH },
+  { id: 'car-zil', title: 'ЗІЛ-130', emoji: '🚚', category: 'car', price: 120000 * UAH },
+  { id: 'car-lanos', title: 'Daewoo Lanos', emoji: '🚕', category: 'car', price: 125000 * UAH },
+  { id: 'car-a6c4', title: 'Audi A6 C4', emoji: '🚗', category: 'car', price: 125000 * UAH },
+  { id: 'car-niva', title: 'Lada Niva', emoji: '🚙', category: 'car', price: 145000 * UAH },
+  { id: 'car-galant', title: 'Mitsubishi Galant 8', emoji: '🚗', category: 'car', price: 145000 * UAH },
+  { id: 'car-w124', title: 'Mercedes-Benz W124', emoji: '🚘', category: 'car', price: 165000 * UAH },
+  { id: 'car-aveo', title: 'Chevrolet Aveo', emoji: '🚗', category: 'car', price: 205000 * UAH },
+  { id: 'car-doblo', title: 'Fiat Doblo', emoji: '🚐', category: 'car', price: 290000 * UAH },
+  { id: 'car-a6c6', title: 'Audi A6 C6', emoji: '🚘', category: 'car', price: 330000 * UAH },
+  { id: 'car-megane', title: 'Renault Megane', emoji: '🚘', category: 'car', price: 370000 * UAH },
+  { id: 'car-tesla', title: 'Tesla Model S', emoji: '⚡', category: 'car', price: 1250000 * UAH },
+  { id: 'car-x3m', title: 'BMW X3 M', emoji: '🚙', category: 'car', price: 2300000 * UAH },
+  { id: 'car-x5m', title: 'BMW X5 M', emoji: '🏎️', category: 'car', price: 3300000 * UAH },
   // Мегаприз бонусу «Золотого Карася». Ціна як у вживаного на ринку України (≈ $21 тис.).
   { id: 'prize-sprinter', title: 'Mercedes Sprinter 3.0', emoji: '🚐', category: 'car', price: 900000 * UAH, prize: true },
-  { id: 'car-yacht', title: 'Яхта', emoji: '🛥️', category: 'car', price: 3000000 * UAH },
 
   { id: 'home-room', title: 'Кімната в гуртожитку', emoji: '🛏️', category: 'home', price: 1000 * UAH, income: 5 * UAH },
   { id: 'home-flat', title: 'Квартира', emoji: '🏢', category: 'home', price: 20000 * UAH, income: 15 * UAH },
@@ -60,8 +80,8 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'biz-factory', title: 'Майонезний завод', emoji: '🏭', category: 'business', price: 1200000 * UAH, income: 4000 * UAH },
 ];
 
-// Кожен куплений транспорт додає 1 % до виграшів в іграх.
-export const VEHICLE_BOOST = 0.01;
+// Кожен куплений транспорт додає 0,5 % до виграшів в іграх.
+export const VEHICLE_BOOST = 0.005;
 
 export function vehicleCount(owned: string[]) {
   return owned.filter((id) => findItem(id)?.category === 'car').length;

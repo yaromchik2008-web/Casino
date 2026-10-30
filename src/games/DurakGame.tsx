@@ -59,10 +59,14 @@ function CardView({ card, back, glow, small }: { card?: DCard; back?: boolean; g
   }
   const red = card.s === '♥' || card.s === '♦';
   const color = red ? '#DC2626' : '#111827';
+  // Кут з рангом і мастю, як на справжній карті: його видно, навіть коли карту накрили іншою.
   return (
     <View style={[size, styles.cardFace, glow && styles.glow]}>
-      <Text style={[styles.rank, small && styles.rankSmall, { color }]}>{RANKS[card.r] ?? card.r}</Text>
-      <Text style={[styles.suit, small && styles.suitSmall, { color }]}>{card.s}</Text>
+      <View style={styles.corner}>
+        <Text style={[styles.cornerRank, { color }]}>{RANKS[card.r] ?? card.r}</Text>
+        <Text style={[styles.cornerSuit, { color }]}>{card.s}</Text>
+      </View>
+      <Text style={[styles.suit, small && styles.suitSmall, styles.centerSuit, { color }]}>{card.s}</Text>
     </View>
   );
 }
@@ -142,9 +146,11 @@ function Board({
           ) : (
             <Text style={styles.trumpBig}>{state.trump}</Text>
           )}
-          <Text style={styles.deckText}>
-            {state.deck.length ? `колода ${state.deck.length}` : 'колода пуста'} · козир {state.trump}
-          </Text>
+          <View style={styles.trumpBadge}>
+            <Text style={styles.trumpBadgeText}>КОЗИР</Text>
+            <Text style={[styles.trumpBadgeSuit, (state.trump === '♥' || state.trump === '♦') && { color: '#F87171' }]}>{state.trump}</Text>
+          </View>
+          <Text style={styles.deckText}>{state.deck.length ? `колода ${state.deck.length}` : 'колода пуста'}</Text>
         </View>
         <View style={styles.fight}>
           {state.table.length === 0 ? (
@@ -628,7 +634,24 @@ const styles = StyleSheet.create({
   fight: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center', minHeight: 90 },
   empty: { color: '#86EFAC', fontStyle: 'italic' },
   pair: { width: 54, height: 90 },
-  cover: { position: 'absolute', left: 14, top: 32 },
+  cover: { position: 'absolute', left: 14, top: 30 },
+  corner: { position: 'absolute', left: 3, top: 2, alignItems: 'center' },
+  cornerRank: { fontSize: 11, fontWeight: '900', lineHeight: 12 },
+  cornerSuit: { fontSize: 11, lineHeight: 12 },
+  centerSuit: { marginTop: 8 },
+  trumpBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.gold,
+  },
+  trumpBadgeText: { color: colors.gold, fontSize: 9, fontWeight: '900' },
+  trumpBadgeSuit: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
   status: { color: colors.gold, fontWeight: '900', textAlign: 'center', fontSize: 15 },
   hand: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, justifyContent: 'center' },
   handCard: {},
@@ -641,8 +664,8 @@ const styles = StyleSheet.create({
   backStar: { color: '#FDE68A', fontSize: 18 },
   rank: { fontSize: 18, fontWeight: '900' },
   rankSmall: { fontSize: 15 },
-  suit: { fontSize: 18 },
-  suitSmall: { fontSize: 15 },
+  suit: { fontSize: 24 },
+  suitSmall: { fontSize: 20 },
   jokerText: { fontSize: 22 },
   jokerLabel: { fontSize: 7, fontWeight: '900' },
   note: { color: colors.muted, fontSize: 12, textAlign: 'center' },

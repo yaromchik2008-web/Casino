@@ -97,7 +97,7 @@ export function ShopScreen() {
           </View>
           {cat === 'car' && (
             <Text style={styles.empty}>
-              🍀 Кожен транспорт додає +1 % до виграшів в іграх. Зараз: +{vehicleCount(s.owned)} %
+              🍀 Кожен транспорт додає +0,5 % до виграшів в іграх. Зараз: +{String(vehicleCount(s.owned) * 0.5).replace(".", ",")} %
             </Text>
           )}
           {SHOP_ITEMS.filter((i) => i.category === cat && !i.prize).map((item) => {
@@ -110,7 +110,7 @@ export function ShopScreen() {
                   <Text style={styles.itemTitle}>{item.title}</Text>
                   <Text style={styles.itemPrice}>{formatCoins(item.price)}</Text>
                   {item.income ? <Text style={styles.itemIncome}>+{formatCoins(item.income)} за годину</Text> : null}
-                  {item.category === 'car' ? <Text style={styles.itemIncome}>🍀 +1 % до виграшів</Text> : null}
+                  {item.category === 'car' ? <Text style={styles.itemIncome}>🍀 +0,5 % до виграшів</Text> : null}
                 </View>
                 {owned ? (
                   <Text style={styles.owned}>✓ Твоє</Text>

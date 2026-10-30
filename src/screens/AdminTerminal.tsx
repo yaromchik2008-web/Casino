@@ -1,12 +1,12 @@
 import { ComponentRef, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AdminKind, Profile, adminAct, adminPlayers, friendlyError, myProfile, takeAdminActions } from '../state/friends';
+import { AdminKind, Profile, adminAct, adminPlayers, adminStats, friendlyError, myProfile, takeAdminActions } from '../state/friends';
 import { SHOP_ITEMS, findItem } from '../state/shop';
 import { useWallet } from '../state/WalletContext';
 import { formatCoins } from '../theme';
 
 // Термінал розробника: відкривається промокодом «hi» лише в гравця 777777.
-// Усі команди йдуть через сервер, який сам перевіряє права (docs/supabase-v12.sql).
+// Усі команди йдуть через сервер, який сам перевіряє права (docs/supabase-v12.sql, v13).
 
 const MONO = Platform.select({ web: 'ui-monospace, Menlo, Consolas, monospace', ios: 'Menlo', default: 'monospace' });
 const GREEN = '#4ADE80';
@@ -24,6 +24,13 @@ const HELP = [
   'lvl КОД N            — встановити рівень',
   'msg КОД ТЕКСТ        — повідомлення гравцю',
   'reset КОД            — скинути прогрес гравця',
+  'friend КОД           — одразу додати в друзі',
+  'ban КОД ХВ [причина] — бан на ХВ хвилин (0 = назавжди)',
+  'unban КОД            — зняти бан',
+  'rename КОД ІМ’Я      — змінити ім’я гравцю',
+  'all ТЕКСТ            — повідомлення всім гравцям',
+  'online               — хто зараз у мережі',
+  'stats                — статистика гри',
   'clear                — очистити екран',
   'КОД = me — це ти',
 ];
@@ -36,7 +43,9 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
   const [target, setTarget] = useState<Profile | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [banMins, setBanMins] = useState('');
+  const [banWhy, setBanWhy] = useState('');
+  const [newName, setNewName] = useState('');
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const myCode = myProfile()?.code ?? '';
 
@@ -53,31 +62,75 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
     }
   };
 
+  // Список (і хто в мережі) оновлюється сам, поки термінал відкритий.
   useEffect(() => {
-    if (visible) refresh();
+    if (!visible) return;
+    refresh();
+    const t = setInterval(() => {
+      adminPlayers('')
+        .then((list) => {
+          setPlayers(list);
+          setTarget((cur) => (cur ? list.find((p) => p.id === cur.id) ?? cur : cur));
+        })
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const resolve = (code: string) => (code.toLowerCase() === 'me' ? myCode : code.toUpperCase());
 
-  // Команда собі застосовується одразу, іншим гравцям — коли їхня гра синхронізується (до 30 с).
-  const act = async (code: string, kind: AdminKind, opts: { value?: number; item?: string; note?: string } = {}) => {
-    const c = resolve(code);
-    setBusy(true);
-    try {
-      const name = await adminAct(c, kind, opts);
-      out(`✔ ${name} (${c}): ${kind}${opts.value != null ? ` ${formatCoins(opts.value)}` : ''}${opts.item ? ` ${opts.item}` : ''}`);
-      if (c === myCode) for (const a of await takeAdminActions()) wallet.adminApply(a);
-      else out('  гравець отримає протягом 30 с');
-      const list = await refresh();
-      const t = list.find((p) => p.code === c);
-      if (t) setTarget(t);
-    } catch (e) {
-      out(`✖ ${friendlyError(e)}`);
-    } finally {
-      setBusy(false);
+  // Картку гравця оновлюємо одразу, не чекаючи сервера; якщо сервер відмовив, повертаємо як було.
+  const optimistic = (kind: AdminKind, p: Profile, opts: { value?: number; item?: string; note?: string }): Profile => {
+    const owned = p.owned ?? [];
+    switch (kind) {
+      case 'item_give':
+        return { ...p, owned: owned.includes(opts.item!) ? owned : [...owned, opts.item!] };
+      case 'item_take':
+        return { ...p, owned: owned.filter((x) => x !== opts.item) };
+      case 'balance_set':
+        return { ...p, balance: opts.value! };
+      case 'balance_add':
+        return { ...p, balance: p.balance + opts.value! };
+      case 'balance_take':
+        return { ...p, balance: Math.max(0, p.balance - opts.value!) };
+      case 'level_set':
+        return { ...p, level: opts.value! };
+      case 'rename':
+        return { ...p, name: opts.note!.slice(0, 24) };
+      case 'ban':
+        return { ...p, banned_until: opts.value ? new Date(Date.now() + opts.value * 60000).toISOString() : 'infinity', ban_note: opts.note ?? null };
+      case 'unban':
+        return { ...p, banned_until: null, ban_note: null };
+      default:
+        return p;
     }
   };
+
+  const act = async (code: string, kind: AdminKind, opts: { value?: number; item?: string; note?: string } = {}) => {
+    const c = resolve(code);
+    const before = players.find((p) => p.code === c) ?? (target?.code === c ? target : null);
+    if (before) {
+      const after = optimistic(kind, before, opts);
+      setPlayers((list) => list.map((p) => (p.id === after.id ? after : p)));
+      setTarget((cur) => (cur?.id === after.id ? after : cur));
+    }
+    try {
+      const name = await adminAct(c, kind, opts);
+      out(`✔ ${name} (${c}): ${kind}${opts.value != null ? ` ${kind.startsWith('balance') ? formatCoins(opts.value) : opts.value}` : ''}${opts.item ? ` ${opts.item}` : ''}`);
+      if (c === myCode) for (const a of await takeAdminActions()) wallet.adminApply(a);
+    } catch (e) {
+      out(`✖ ${friendlyError(e)}`);
+      if (before) {
+        setPlayers((list) => list.map((p) => (p.id === before.id ? before : p)));
+        setTarget((cur) => (cur?.id === before.id ? before : cur));
+      }
+    }
+  };
+
+  const banned = (p: Profile) => !!p.banned_until && (p.banned_until === 'infinity' || new Date(p.banned_until).getTime() > Date.now());
+  const banText = (p: Profile) =>
+    !banned(p) ? '' : p.banned_until === 'infinity' || new Date(p.banned_until!).getFullYear() > 9000 ? 'бан назавжди' : `бан до ${new Date(p.banned_until!).toLocaleString('uk-UA')}`;
 
   const money = (s?: string) => {
     const v = Number(String(s ?? '').replace(',', '.').replace(/\s/g, ''));
@@ -145,6 +198,49 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
         if (!a1) return out('✖ reset КОД');
         await act(a1, 'reset');
         break;
+      case 'friend':
+        if (!a1) return out('✖ friend КОД');
+        await act(a1, 'friend_add');
+        break;
+      case 'ban': {
+        const [mins, ...why] = a2.split(/\s+/);
+        const m = mins === 'forever' ? 0 : Math.round(Number(mins));
+        if (!a1 || !Number.isFinite(m) || m < 0) return out('✖ ban КОД ХВИЛИНИ [причина]  (0 або forever — назавжди)');
+        await act(a1, 'ban', { value: m, note: why.join(' ') || undefined });
+        break;
+      }
+      case 'unban':
+        if (!a1) return out('✖ unban КОД');
+        await act(a1, 'unban');
+        break;
+      case 'rename':
+        if (!a1 || !a2.trim()) return out('✖ rename КОД ІМ’Я');
+        await act(a1, 'rename', { note: a2.trim() });
+        break;
+      case 'all': {
+        const text = [a1, a2].join(' ').trim();
+        if (!text) return out('✖ all ТЕКСТ');
+        try {
+          const n = await adminAct('*', 'broadcast', { note: text.slice(0, 300) });
+          out(`✔ надіслано ${n} гравцям`);
+        } catch (e) {
+          out(`✖ ${friendlyError(e)}`);
+        }
+        break;
+      }
+      case 'online': {
+        const list = (await refresh()).filter((p) => p.online);
+        out(...list.map((p) => `🟢 ${p.code}  ${p.name}`), `${list.length} у мережі`);
+        break;
+      }
+      case 'stats':
+        try {
+          const st = await adminStats();
+          out(`гравців ${st.players} · у мережі ${st.online} · за добу ${st.today} · у бані ${st.banned}`, `усього грошей у гравців ${formatCoins(Number(st.coins))}`);
+        } catch (e) {
+          out(`✖ ${friendlyError(e)}`);
+        }
+        break;
       default:
         out('✖ невідома команда, напиши help');
     }
@@ -200,8 +296,10 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
               {players.map((p) => (
                 <Pressable key={p.id} onPress={() => setTarget(p)} style={[styles.chip, t?.id === p.id && styles.chipOn]}>
                   <Text style={styles.chipText}>
+                    {p.online ? '🟢 ' : '⚫ '}
                     {p.code === myCode ? '⭐ ' : ''}
                     {p.name} · {p.code}
+                    {banned(p) ? ' ⛔' : ''}
                   </Text>
                   <Text style={styles.chipSub}>{formatCoins(p.balance)}</Text>
                 </Pressable>
@@ -216,6 +314,11 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
                 <Text style={styles.cardSub}>
                   Баланс {formatCoins(t.balance)} · {t.status}
                 </Text>
+                <Text style={[styles.cardSub, banned(t) && { color: '#FCA5A5' }]}>
+                  {t.online ? '🟢 у мережі' : `⚫ не в мережі · був ${new Date(t.updated_at).toLocaleString('uk-UA')}`}
+                  {banned(t) ? ` · ⛔ ${banText(t)}${t.ban_note ? ` (${t.ban_note})` : ''}` : ''}
+                </Text>
+                {t.code !== myCode && <Btn label="👥 ДОДАТИ В ДРУЗІ" onPress={() => act(t.code, 'friend_add')} />}
                 <View style={styles.row}>
                   <TextInput
                     value={amount}
@@ -227,12 +330,12 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
                   />
                 </View>
                 <View style={styles.row}>
-                  <Btn label="= БАЛАНС" disabled={busy || v == null} onPress={() => act(t.code, 'balance_set', { value: v! })} />
-                  <Btn label="+ ДАТИ" disabled={busy || !v} onPress={() => act(t.code, 'balance_add', { value: v! })} />
-                  <Btn label="− ЗАБРАТИ" disabled={busy || !v} onPress={() => act(t.code, 'balance_take', { value: v! })} />
+                  <Btn label="= БАЛАНС" disabled={v == null} onPress={() => act(t.code, 'balance_set', { value: v! })} />
+                  <Btn label="+ ДАТИ" disabled={!v} onPress={() => act(t.code, 'balance_add', { value: v! })} />
+                  <Btn label="− ЗАБРАТИ" disabled={!v} onPress={() => act(t.code, 'balance_take', { value: v! })} />
                   <Btn
                     label="РІВЕНЬ"
-                    disabled={busy || !Number(amount)}
+                    disabled={!Number(amount)}
                     onPress={() => act(t.code, 'level_set', { value: Math.round(Number(amount)) })}
                   />
                 </View>
@@ -243,7 +346,6 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
                     return (
                       <Pressable
                         key={i.id}
-                        disabled={busy}
                         onPress={() => act(t.code, has ? 'item_take' : 'item_give', { item: i.id })}
                         style={[styles.item, has && styles.itemOn]}
                       >
@@ -264,14 +366,61 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
                   />
                   <Btn
                     label="НАДІСЛАТИ"
-                    disabled={busy || !note.trim()}
+                    disabled={!note.trim()}
                     onPress={() => {
                       act(t.code, 'message', { note: note.trim() });
                       setNote('');
                     }}
                   />
                 </View>
-                <Btn label="СКИНУТИ ПРОГРЕС" danger disabled={busy} onPress={() => run(`reset ${t.code}`)} />
+                <Text style={styles.section}>БАН (хвилини в полі суми; порожньо — назавжди)</Text>
+                <View style={styles.row}>
+                  <TextInput
+                    value={banMins}
+                    onChangeText={setBanMins}
+                    placeholder="хвилин"
+                    placeholderTextColor="#2F6B45"
+                    keyboardType="number-pad"
+                    style={[styles.input, { width: 90, minWidth: 90 }]}
+                  />
+                  <TextInput
+                    value={banWhy}
+                    onChangeText={setBanWhy}
+                    placeholder="причина"
+                    placeholderTextColor="#2F6B45"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                </View>
+                <View style={styles.row}>
+                  {[60, 1440, 10080].map((m) => (
+                    <Btn key={m} label={m === 60 ? '1 год' : m === 1440 ? '1 доба' : '7 діб'} onPress={() => setBanMins(String(m))} />
+                  ))}
+                  <Btn
+                    label={banMins.trim() ? `⛔ БАН ${banMins} хв` : '⛔ БАН НАЗАВЖДИ'}
+                    danger
+                    disabled={t.code === myCode}
+                    onPress={() => act(t.code, 'ban', { value: Math.max(0, Math.round(Number(banMins) || 0)), note: banWhy.trim() || undefined })}
+                  />
+                  {banned(t) && <Btn label="РОЗБАНИТИ" onPress={() => act(t.code, 'unban')} />}
+                </View>
+                <View style={styles.row}>
+                  <TextInput
+                    value={newName}
+                    onChangeText={setNewName}
+                    placeholder="нове ім’я"
+                    placeholderTextColor="#2F6B45"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                  <Btn
+                    label="ПЕРЕЙМЕНУВАТИ"
+                    disabled={!newName.trim()}
+                    onPress={() => {
+                      act(t.code, 'rename', { note: newName.trim() });
+                      setNewName('');
+                    }}
+                  />
+                </View>
+                <Btn label="СКИНУТИ ПРОГРЕС" danger onPress={() => run(`reset ${t.code}`)} />
               </View>
             )}
           </ScrollView>

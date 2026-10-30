@@ -12,6 +12,9 @@ const GAMES: Record<string, string> = {
   'golden-karas': '🐟 Золотий Карась',
   'fruit-classic': '🍒 Фруктова класика',
   shakhta: '⛏️ Шахта',
+  durak: '🃏 Дурак',
+  number: '🎲 Число 1–99',
+  roulette: '🔫 Смертельна рулетка',
 };
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -99,11 +102,16 @@ async function send(userId: string, text: string) {
 
 // Бот отримав /start: вітаємо й даємо кнопку входу в гру. Запрошення ref_КОД передаємо в гру.
 async function onStart(chatId: number, payload: string) {
-  const ref = payload.match(/^ref_([A-Z0-9]{6})$/i)?.[1]?.toUpperCase();
+  let ref = payload.match(/^ref_([A-Z0-9]{6})$/i)?.[1]?.toUpperCase();
+  // Хто вже грає (Telegram прив'язаний до профілю), той не отримує запрошення вдруге.
+  if (ref) {
+    const { data: known } = await admin.from('tg_links').select('user_id').eq('tg_id', chatId).limit(1);
+    if (known?.length) ref = undefined;
+  }
   const url = ref ? `${APP_URL}?ref=${ref}` : APP_URL;
   const text = ref
     ? '🎉 Тебе запросив друг! Натисни кнопку нижче, заходь у гру, і ви обоє отримаєте по 200 ігрових ₴.'
-    : '🎰 Вітаю в Casino Victor! Натисни кнопку нижче, щоб почати грати.';
+    : '🎰 Casino Victor чекає! Натисни кнопку нижче, щоб грати.';
   const res = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

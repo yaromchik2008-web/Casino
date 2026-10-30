@@ -219,7 +219,7 @@ export function ChickenGame({ game }: { game: GameInfo }) {
       <ResultLine text={message.text} tone={message.tone} />
       {active ? (
         <View style={styles.buttons}>
-          <Pressable onPress={() => cashOut()} disabled={lane === 0} style={[styles.btn, styles.btnCash, lane === 0 && styles.btnOff]}>
+          <Pressable onPress={() => cashOut()} disabled={lane === 0} style={({ pressed }) => [styles.btn, styles.btnCash, lane === 0 && styles.btnCashWait, pressed && styles.btnPressed]}>
             <Text style={styles.btnCashText}>ЗАБРАТИ {formatCoins(cashValue)}</Text>
           </Pressable>
           <Pressable onPress={go} style={[styles.btn, styles.btnGo]}>
@@ -545,9 +545,21 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: colors.gold },
   buttons: { flexDirection: 'row', gap: 10, width: '100%' },
   btn: { flex: 1, borderRadius: 18, paddingVertical: 18, alignItems: 'center', justifyContent: 'center' },
-  btnCash: { backgroundColor: '#B7891F' },
+  // Яскраве золото з підсвіткою, щоб кнопка не виглядала натиснутою.
+  btnCash: {
+    backgroundColor: '#FFC93C',
+    borderWidth: 2,
+    borderColor: '#FFE9A8',
+    shadowColor: '#FFC93C',
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
   btnGo: { backgroundColor: colors.green },
   btnOff: { opacity: 0.5 },
+  btnCashWait: { opacity: 0.8, shadowOpacity: 0 },
+  btnPressed: { transform: [{ scale: 0.97 }], opacity: 0.85 },
   btnCashText: { color: '#1F1300', fontWeight: '900', fontSize: 15 },
   btnGoText: { color: '#FFFFFF', fontWeight: '900', fontSize: 15 },
 });

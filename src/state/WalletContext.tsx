@@ -16,7 +16,7 @@ import {
 } from './progress';
 import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
-import { INCOME_CAP_HOURS, REMOVED_ITEMS, findItem, hourlyIncome, sellPrice, vehicleBoost } from './shop';
+import { INCOME_CAP_HOURS, findItem, refundRemoved, hourlyIncome, sellPrice, vehicleBoost } from './shop';
 import { SportBet, SportPick, betResult, getMatch } from './sports';
 import { AdminAction, cloudStateOn, loadState, myProfile, saveState, tourneyRound } from './friends';
 import { merge3 } from './merge';
@@ -212,14 +212,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const saved = JSON.parse(raw);
           // Старі збереження рахували 1 XP за копійку: переводимо на нову, повільнішу шкалу.
           if (!saved.xpV) saved.xp = Math.round((saved.xp ?? 0) / XP_PER_KOPECKS);
-          const owned: string[] = saved.owned ?? [];
-          const refund = owned.reduce((sum, id) => sum + (REMOVED_ITEMS[id] ?? 0), 0);
-          if (refund > 0) {
-            saved.owned = owned.filter((id) => !(id in REMOVED_ITEMS));
-            saved.balance = (saved.balance ?? 0) + refund;
-            notes.push(`📱 Телефони прибрали з магазину: повернули ${formatCoins(refund)}`);
-          }
-          const restored = rollPeriods({ ...initialState(), ...saved, xpV: 2 }, notes);
+          const { state: cleaned, refund } = refundRemoved({ ...initialState(), ...saved, xpV: 2 } as PlayerState);
+          if (refund > 0) notes.push(`🚗 Частину майна прибрали з магазину: повернули ${formatCoins(refund)}`);
+          const restored = rollPeriods(cleaned, notes);
           stateRef.current = restored;
           setState(restored);
           if (notes.length) notify(notes.join('\n'));
@@ -269,7 +264,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       sc.rev = rev;
       sc.base = server;
       remember();
-      if (JSON.stringify(next) !== JSON.stringify(local)) adopt(next);
+      const { state: cleaned, refund } = refundRemoved(next);
+      if (refund > 0) notify(`🚗 Частину майна прибрали з магазину: повернули ${formatCoins(refund)}`);
+      if (JSON.stringify(cleaned) !== JSON.stringify(local)) adopt(cleaned);
     };
     const push = async () => {
       if (sc.busy || stopped || !cloudStateOn()) return;
@@ -378,7 +375,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     (gameId: string, amount: number) => {
       if (amount <= 0) return;
       // Бонус удачі (за бажанням ghj): гравець у середньому виходить у невеликий плюс.
-      // Плюс 1 % за кожен куплений транспорт.
+      // Плюс 0,5 % за кожен куплений транспорт.
       const rounded = Math.round(amount * winBoost(gameId) * vehicleBoost(stateRef.current.owned));
       commit((s) => ({
         ...s,
