@@ -13,7 +13,7 @@ import {
   Duel,
   Profile,
   cancelDuel,
-  claimTransfers,
+  claimTransfers2,
   createDuel,
   friendlyError,
   myProfile,
@@ -163,8 +163,8 @@ export function DuelList({
     });
 
   const refundNow = async () => {
-    const got = await claimTransfers();
-    if (got > 0) wallet.credit(got);
+    const got = await claimTransfers2();
+    if (got.credit > 0) wallet.credit(got.credit);
   };
 
   return (

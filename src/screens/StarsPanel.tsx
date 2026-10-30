@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { sfx } from '../audio/sound';
 import { Panel } from '../components/ui';
 import { friendsEnabled } from '../config';
-import { claimTransfers, createStarsInvoice } from '../state/friends';
+import { claimTransfers2, createStarsInvoice } from '../state/friends';
 import { STAR_PACKS } from '../state/stars';
 import { useWallet } from '../state/WalletContext';
 import { inTelegram, telegramPay } from '../telegram';
@@ -34,9 +34,9 @@ export function StarsPanel() {
       // Бот зараховує ₴ за кілька секунд після оплати.
       for (let k = 0; k < 10; k++) {
         await sleep(2000);
-        const got = await claimTransfers().catch(() => 0);
+        const { credit, total: got } = await claimTransfers2().catch(() => ({ credit: 0, total: 0 }));
         if (got > 0) {
-          wallet.credit(got);
+          if (credit > 0) wallet.credit(credit);
           sfx('cash');
           wallet.notify(`⭐ Зараховано ${formatCoins(got)}. Дякуємо!`);
           setMsg({ text: `Зараховано ${formatCoins(got)}`, ok: true });

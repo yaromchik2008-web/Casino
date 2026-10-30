@@ -5,12 +5,14 @@ import { Platform } from 'react-native';
 import { telegramName, telegramStartParam } from '../telegram';
 import { formatCoins } from '../theme';
 import { sfx } from '../audio/sound';
-import { claimReferral, claimTransfers, inboxSince, takeAdminActions, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
+import { showToast } from './toast';
+import { requestNav } from './nav';
+import { claimReferral, listDuels, respondDuel, friendlyError, claimTransfers, claimTransfers2, cloudStateOn, inboxSince, takeAdminActions, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
 import { assetsValue, statusFor } from './shop';
 import { useWallet } from './WalletContext';
 
 const SYNC_MS = 30000;
-const INBOX_MS = 8000;
+const INBOX_MS = 6000;
 const REF_DONE = 'freecasino:ref-done';
 const REF_PENDING = 'freecasino:ref-pending';
 
@@ -38,8 +40,8 @@ async function tryReferral(notify: (t: string) => void, credit: (n: number) => v
     const name = await claimReferral(code);
     await AsyncStorage.setItem(REF_DONE, code);
     // Бонус забираємо й зараховуємо відразу, щоб запрошений побачив свої 200 ₴.
-    const got = await claimTransfers().catch(() => 0);
-    if (got > 0) credit(got);
+    const { credit: add, total: got } = await claimTransfers2().catch(() => ({ credit: 0, total: 0 }));
+    if (add > 0) credit(add);
     notify(`🎉 ${name} запросив тебе! Тобі +${formatCoins(got || 20000)}, другу теж`);
   } catch (e) {
     const msg = String((e as { message?: string })?.message ?? e);
@@ -67,32 +69,66 @@ export function useFriendSync() {
         }
         const s = forced != null ? { ...ref.current.state, balance: forced } : ref.current.state;
         const status = statusFor(s.balance + assetsValue(s.owned));
-        await syncProfile({ balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}`, owned: s.owned });
+        // Коли стан на сервері (v13), баланс і майно в профілі оновлює сам сервер.
+        await syncProfile(
+          cloudStateOn()
+            ? { level: s.level, status: `${status.emoji} ${status.title}` }
+            : { balance: s.balance, level: s.level, status: `${status.emoji} ${status.title}`, owned: s.owned },
+        );
         await tryReferral(ref.current.notify, ref.current.credit).catch(() => {});
-        for (const a of await takeAdminActions()) if (!stopped) ref.current.adminApply(a);
         if (s.tourney && s.tourney.round === tourneyRound()) await reportTourney(s.tourney.round, s.tourney.net).catch(() => {});
-        const got = await claimTransfers();
-        if (got > 0 && !stopped) {
-          ref.current.credit(got);
-          ref.current.notify(`👥 Зараховано ${formatCoins(got)}: подарунок, дуель або турнір`);
-        }
+        await money();
       } catch {
         // Без мережі просто пропускаємо цей раз.
+      }
+    };
+    // Гроші й команди розробника забираємо часто, щоб баланс мінявся одразу.
+    const money = async () => {
+      if (!myProfile()) return;
+      for (const a of await takeAdminActions()) if (!stopped) ref.current.adminApply(a);
+      const got = await claimTransfers2();
+      if (got.total > 0 && !stopped) {
+        if (got.credit > 0) ref.current.credit(got.credit);
+        ref.current.notify(`👥 Зараховано ${formatCoins(got.total)}: подарунок, дуель або турнір`);
       }
     };
     // Спливаюче сповіщення, коли хтось пише або кличе на дуель.
     let since: string | null = null;
     const inbox = async () => {
       if (!myProfile()) return;
+      await money().catch(() => {});
       try {
         const r = await inboxSince(since);
         since = r.latest;
         const last = r.items[r.items.length - 1];
         if (!last || stopped) return;
-        const text = last.body.startsWith('⚔️')
-          ? `⚔️ ${last.name} кличе тебе на дуель! Зайди в «Друзі»`
-          : `💬 ${last.name}: ${last.body.slice(0, 80)}`;
-        ref.current.notify(r.items.length > 1 ? `${text} (+ ще ${r.items.length - 1})` : text);
+        const more = r.items.length > 1 ? ` (+ ще ${r.items.length - 1})` : '';
+        const openChat = () => requestNav({ tab: 'friends', chat: last.sender });
+        if (last.body.startsWith('⚔️')) {
+          // Виклик на дуель: одразу кнопки «Прийняти» і «Відхилити».
+          const duel = (await listDuels().catch(() => [])).find((d) => d.status === 'pending' && d.challenger === last.sender && d.opponent === myProfile()?.id);
+          showToast(
+            {
+              text: duel ? `⚔️ ${last.name} кличе на дуель · ставка ${formatCoins(duel.stake)}` : `⚔️ ${last.name} кличе тебе на дуель!`,
+              onPress: openChat,
+              actions: duel
+                ? [
+                    { label: 'Прийняти', primary: true, onPress: () => requestNav({ tab: 'friends', acceptDuel: duel.id }) },
+                    {
+                      label: 'Відхилити',
+                      onPress: () =>
+                        respondDuel(duel.id, false)
+                          .then(() => ref.current.notify('Виклик відхилено'))
+                          .catch((e) => ref.current.notify(friendlyError(e))),
+                    },
+                  ]
+                : undefined,
+            },
+            20000,
+          );
+        } else {
+          showToast({ text: `💬 ${last.name}: ${last.body.slice(0, 80)}${more}`, onPress: openChat }, 5000);
+        }
         sfx('bonus', 0.5);
       } catch {
         // Пропускаємо до наступного разу.

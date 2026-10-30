@@ -4,7 +4,7 @@ import { Platform, Share, StyleSheet, Text, TextInput, View } from 'react-native
 import { sfx } from '../audio/sound';
 import { BigButton, Panel } from '../components/ui';
 import { friendsEnabled } from '../config';
-import { Profile, claimReferral, claimTransfers, friendlyError, inviteLink, myProfile, myReferrals, startFriends, topReferrers } from '../state/friends';
+import { Profile, claimReferral, claimTransfers2, friendlyError, inviteLink, myProfile, myReferrals, startFriends, topReferrers } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
 import { telegramName, telegramShare } from '../telegram';
 import { colors, formatCoins, formatShort } from '../theme';
@@ -60,8 +60,8 @@ export function InvitePanel() {
   const enter = async () => {
     try {
       const name = await claimReferral(code);
-      const got = await claimTransfers();
-      if (got > 0) wallet.credit(got);
+      const got = await claimTransfers2();
+      if (got.credit > 0) wallet.credit(got.credit);
       sfx('cash');
       setCode('');
       setMsg({ text: `Готово! Тобі і ${name} по 200 ₴`, ok: true });

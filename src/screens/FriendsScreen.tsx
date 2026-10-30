@@ -21,6 +21,8 @@ import {
   syncProfile,
 } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
+import { onNav, takeNav } from '../state/nav';
+import { claimTransfers2, fetchProfile as loadProfile, respondDuel as answerDuel } from '../state/friends';
 import { DuelList, DuelPlay, DuelSetup } from './Duels';
 import { PlayerProfile } from './PlayerProfile';
 import { telegramName } from '../telegram';
@@ -222,17 +224,50 @@ export function FriendsScreen() {
         }
       })
       .catch(() => {});
-    claimTransfers()
+    claimTransfers2()
       .then((got) => {
-        if (got > 0) {
-          wallet.credit(got);
+        if (got.total > 0) {
+          if (got.credit > 0) wallet.credit(got.credit);
           sfx('cash');
-          wallet.notify(`Зараховано ${formatCoins(got)}`);
+          wallet.notify(`Зараховано ${formatCoins(got.total)}`);
         }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Перехід зі сповіщення: відкрити чат з другом або одразу прийняти дуель.
+  const handleNav = useCallback(async () => {
+    const r = takeNav();
+    if (!r) return;
+    try {
+      if (r.acceptDuel) {
+        const d = (await listDuels()).find((x) => x.id === r.acceptDuel);
+        if (!d || d.status !== 'pending') return wallet.notify('Цей виклик уже закрито');
+        if (!wallet.spend(d.stake)) return wallet.notify('Недостатньо коштів для ставки');
+        try {
+          await answerDuel(d.id, true);
+        } catch (e) {
+          wallet.credit(d.stake);
+          throw e;
+        }
+        sfx('bonus');
+        setChat(null);
+        setPlaying({ ...d, status: 'accepted' });
+      } else if (r.chat) {
+        const f = (await listFriends()).find((x) => x.id === r.chat) ?? (await loadProfile(r.chat));
+        if (f) {
+          setPlaying(null);
+          setChat(f);
+        }
+      }
+    } catch (e) {
+      wallet.notify(friendlyError(e));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => onNav(() => void startFriends(telegramName() ?? 'Гравець').then(handleNav, () => {})), [handleNav]);
 
   useEffect(() => {
     if (!friendsEnabled()) return;
@@ -242,6 +277,7 @@ export function FriendsScreen() {
         setName(p.name);
         refresh();
         refreshDuels();
+        handleNav();
       })
       .catch((e) => setError(friendlyError(e)));
     const t = setInterval(refresh, 15000);

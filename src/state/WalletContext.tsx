@@ -18,7 +18,10 @@ import { formatCoins } from '../theme';
 import { ACHIEVEMENTS } from './achievements';
 import { INCOME_CAP_HOURS, REMOVED_ITEMS, findItem, hourlyIncome, sellPrice, vehicleBoost } from './shop';
 import { SportBet, SportPick, betResult, getMatch } from './sports';
-import { AdminAction, tourneyRound } from './friends';
+import { AdminAction, cloudStateOn, loadState, myProfile, saveState, tourneyRound } from './friends';
+import { merge3 } from './merge';
+import { friendsEnabled } from '../config';
+import { AppState, Platform } from 'react-native';
 import { PICKAXES } from '../games/mineEngine';
 import { findGame } from '../games/catalog';
 
@@ -32,6 +35,10 @@ export function winBoost(gameId: string) {
 }
 
 const KEY = 'freecasino:player:v3';
+// Остання версія стану з сервера, з якою цей пристрій синхронізувався (для злиття змін).
+const SYNC_KEY = 'freecasino:sync:v1';
+const PULL_MS = 4000;
+const PUSH_DELAY_MS = 1500;
 
 export const START_BALANCE = 30000; // усі суми в копійках: 30000 = 300,00 ₴
 export const HOURLY_BONUS = 2000;
@@ -162,6 +169,8 @@ interface WalletApi {
   grantItem: (id: string) => 'item' | 'cash' | 'none';
   /** Команда з термінала розробника (баланс, майно, рівень, повідомлення). */
   adminApply: (a: AdminAction) => void;
+  /** Блокування від розробника: до якого часу і за що. */
+  banned: { until: string; note: string | null } | null;
   openGame: (gameId: string) => void;
   reset: () => void;
 }
@@ -222,6 +231,118 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (loaded) AsyncStorage.setItem(KEY, JSON.stringify(state)).catch(() => {});
+  }, [state, loaded]);
+
+  // Синхронізація з сервером: телефон і комп'ютер з тим самим кодом бачать один баланс і майно,
+  // а подарунки й команди розробника приходять одразу, навіть якщо гравця не було в грі.
+  const [banned, setBanned] = useState<WalletApi['banned']>(null);
+  const sync = useRef<{ rev: number; base: PlayerState | null; busy: boolean; timer: ReturnType<typeof setTimeout> | null }>({
+    rev: 0,
+    base: null,
+    busy: false,
+    timer: null,
+  });
+  const syncNow = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!loaded || !friendsEnabled()) return;
+    let stopped = false;
+    const sc = sync.current;
+    const adopt = (next: PlayerState) => {
+      stateRef.current = next;
+      setState(next);
+    };
+    const fromServer = (raw: Record<string, unknown>) => rollPeriods({ ...initialState(), ...(raw as Partial<PlayerState>), xpV: 2 }, []);
+    const remember = () => AsyncStorage.setItem(SYNC_KEY, JSON.stringify({ rev: sc.rev, base: sc.base })).catch(() => {});
+    // Зливає серверний стан з нашим і повертає, чи лишились у нас незбережені зміни.
+    const absorb = (rev: number, raw: Record<string, unknown> | null | undefined) => {
+      if (!raw) return;
+      const server = fromServer(raw);
+      const local = stateRef.current;
+      const base = sc.base;
+      let next: PlayerState;
+      if (!base || (server as { resetAt?: number }).resetAt !== (base as { resetAt?: number }).resetAt) {
+        // Перший раз на цьому пристрої або розробник скинув прогрес: беремо серверне повністю.
+        next = server;
+      } else {
+        next = merge3(base as unknown as Record<string, unknown>, local as unknown as Record<string, unknown>, server as unknown as Record<string, unknown>) as unknown as PlayerState;
+      }
+      sc.rev = rev;
+      sc.base = server;
+      remember();
+      if (JSON.stringify(next) !== JSON.stringify(local)) adopt(next);
+    };
+    const push = async () => {
+      if (sc.busy || stopped || !cloudStateOn()) return;
+      const snap = stateRef.current;
+      if (sc.base && JSON.stringify(snap) === JSON.stringify(sc.base)) return;
+      sc.busy = true;
+      try {
+        const r = await saveState(snap, sc.rev);
+        if (r.ok) {
+          sc.rev = r.rev;
+          sc.base = snap;
+          remember();
+        } else {
+          absorb(r.rev, r.state);
+          schedule();
+        }
+      } catch {
+        // Без мережі збережемо наступного разу.
+      }
+      sc.busy = false;
+    };
+    const pull = async () => {
+      if (sc.busy || stopped || !myProfile()) return;
+      sc.busy = true;
+      try {
+        const r = await loadState(sc.rev);
+        if (r && !stopped) {
+          const until = r.banned_until && (r.banned_until === 'infinity' || new Date(r.banned_until).getTime() > Date.now()) ? r.banned_until : null;
+          setBanned((b) => (until ? (b?.until === until ? b : { until, note: r.ban_note }) : null));
+          if (r.state) absorb(r.rev, r.state);
+          else if (r.rev === 0) sc.base = sc.base ?? null; // на сервері ще порожньо: перший push покладе наш стан
+        }
+      } catch {
+        // Пропускаємо.
+      }
+      sc.busy = false;
+      await push();
+    };
+    const schedule = () => {
+      if (sc.timer) clearTimeout(sc.timer);
+      sc.timer = setTimeout(() => void push(), PUSH_DELAY_MS);
+    };
+    syncNow.current = schedule;
+    AsyncStorage.getItem(SYNC_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        sc.rev = Number(saved.rev) || 0;
+        sc.base = saved.base ?? null;
+      })
+      .catch(() => {})
+      .finally(() => void pull());
+    const t = setInterval(() => void pull(), PULL_MS);
+    // Коли гру згортають, зберігаємо одразу.
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active') void push();
+      else void pull();
+    });
+    const onHide = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') void push();
+    };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onHide);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+      if (sc.timer) clearTimeout(sc.timer);
+      sub.remove();
+      if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [loaded]);
+
+  useEffect(() => {
+    if (loaded) syncNow.current();
   }, [state, loaded]);
 
   const bet = useCallback(
@@ -550,6 +671,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const adminApply = useCallback(
     (a: AdminAction) => {
       const v = Math.max(0, Math.round(a.value ?? 0));
+      if (a.applied) {
+        // Сервер уже змінив стан, він прийде синхронізацією: лише сповіщаємо.
+        const item = a.item ? findItem(a.item) : null;
+        const text: Partial<Record<AdminAction['kind'], string>> = {
+          balance_set: `🛠️ Розробник встановив баланс: ${formatCoins(v)}`,
+          balance_add: `🛠️ Розробник нарахував ${formatCoins(v)}`,
+          balance_take: `🛠️ Розробник забрав ${formatCoins(v)}`,
+          item_give: item ? `🛠️ Розробник подарував: ${item.emoji} ${item.title}` : undefined,
+          item_take: item ? `🛠️ Розробник забрав: ${item.emoji} ${item.title}` : undefined,
+          level_set: `🛠️ Розробник встановив рівень ${Math.max(1, Math.min(MAX_LEVEL, v))}`,
+          message: a.note ? `🛠️ ${a.note}` : undefined,
+          reset: '🛠️ Розробник скинув прогрес',
+        };
+        if (text[a.kind]) notify(text[a.kind]!);
+        syncNow.current();
+        return;
+      }
       switch (a.kind) {
         case 'balance_set':
           commit((p) => ({ ...p, balance: v }));
@@ -641,6 +779,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         enterTourney,
         grantItem,
         adminApply,
+        banned,
         openGame,
         reset,
       }}

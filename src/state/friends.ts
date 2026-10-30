@@ -14,6 +14,10 @@ export interface Profile {
   status: string;
   updated_at: string;
   owned?: string[];
+  plate?: string | null;
+  online?: boolean;
+  banned_until?: string | null;
+  ban_note?: string | null;
 }
 
 export interface Message {
@@ -112,6 +116,8 @@ const ERRORS: Record<string, string> = {
   durak_bad: 'Сервер не прийняв хід',
   not_admin: 'Немає прав розробника',
   no_profile: 'Профіль ще створюється, спробуй за хвилину',
+  banned: 'Тебе заблоковано',
+  bad_plate: 'Сервер не прийняв номер',
 };
 
 export function friendlyError(e: unknown): string {
@@ -124,6 +130,8 @@ export function friendlyError(e: unknown): string {
     return 'На сервері ще не запущено SQL з docs/supabase-v3.sql';
   if (/admin|top_referrers/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
     return 'На сервері ще не запущено SQL з docs/supabase-v12.sql';
+  if (/roulette|plate|admin_stats|state/.test(msg) && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
+    return 'На сервері ще не запущено SQL з docs/supabase-v13.sql';
   if (msg.includes('duel_id') || msg.includes('durak_duel'))
     return 'На сервері ще не запущено SQL з docs/supabase-v11.sql';
   if (msg.includes('durak') && (msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('Could not find')))
@@ -260,7 +268,7 @@ export async function loadMessages(friendId: string): Promise<Message[]> {
 }
 
 /** Нові повідомлення мені після моменту since (час сервера) з іменами відправників. */
-export async function inboxSince(since: string | null): Promise<{ latest: string | null; items: { name: string; body: string }[] }> {
+export async function inboxSince(since: string | null): Promise<{ latest: string | null; items: { sender: string; name: string; body: string }[] }> {
   if (!me) return { latest: since, items: [] };
   let q = db().from('messages').select('sender, body, created_at').eq('receiver', me.id).order('created_at', { ascending: false }).limit(5);
   if (since) q = q.gt('created_at', since);
@@ -273,7 +281,7 @@ export async function inboxSince(since: string | null): Promise<{ latest: string
   const ids = [...new Set(rows.map((r) => r.sender))];
   const names = await db().from('profiles').select('id, name').in('id', ids);
   const byId = new Map(((names.data ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
-  return { latest: rows[0].created_at, items: rows.reverse().map((r) => ({ name: byId.get(r.sender) ?? 'Друг', body: r.body })) };
+  return { latest: rows[0].created_at, items: rows.reverse().map((r) => ({ sender: r.sender, name: byId.get(r.sender) ?? 'Друг', body: r.body })) };
 }
 
 export async function sendMessage(friendId: string, body: string) {
@@ -416,7 +424,20 @@ export async function topReferrers(): Promise<{ name: string; invited: number }[
 }
 
 // Термінал розробника. Права перевіряє сервер (таблиця admins), тут лише виклики.
-export type AdminKind = 'balance_set' | 'balance_add' | 'balance_take' | 'item_give' | 'item_take' | 'level_set' | 'message' | 'reset';
+export type AdminKind =
+  | 'balance_set'
+  | 'balance_add'
+  | 'balance_take'
+  | 'item_give'
+  | 'item_take'
+  | 'level_set'
+  | 'message'
+  | 'reset'
+  | 'ban'
+  | 'unban'
+  | 'rename'
+  | 'friend_add'
+  | 'broadcast';
 
 export interface AdminAction {
   id: number;
@@ -424,6 +445,8 @@ export interface AdminAction {
   value: number | null;
   item: string | null;
   note: string | null;
+  /** Сервер уже змінив мій стан (v13): лишається тільки показати сповіщення. */
+  applied?: boolean;
 }
 
 export async function adminPlayers(query = ''): Promise<Profile[]> {
@@ -447,7 +470,8 @@ export async function adminAct(code: string, kind: AdminKind, opts: { value?: nu
 /** Команди адміна для мене. Без SQL v12 на сервері просто нічого не повертає. */
 export async function takeAdminActions(): Promise<AdminAction[]> {
   if (!me) return [];
-  const { data, error } = await db().rpc('take_admin_actions');
+  let { data, error } = await db().rpc('take_admin_actions2');
+  if (error && /take_admin_actions2/.test(error.message)) ({ data, error } = await db().rpc('take_admin_actions'));
   if (error) return [];
   return ((data ?? []) as AdminAction[]).map((a) => ({ ...a, value: a.value == null ? null : Number(a.value) }));
 }
@@ -547,4 +571,114 @@ export async function durakByDuel(duelId: number): Promise<DurakTable | null> {
 export async function durakDuelStart(duelId: number, state: unknown, turn: number) {
   const { error } = await db().rpc('durak_duel_start', { p_duel: duelId, p_state: state, p_turn: turn });
   if (error) throw error;
+}
+
+// Стан гравця на сервері (docs/supabase-v13.sql): однаковий баланс і майно на всіх пристроях.
+export interface CloudState {
+  rev: number;
+  state: Record<string, unknown> | null;
+  banned_until: string | null;
+  ban_note: string | null;
+}
+
+let cloudOff = false;
+
+/** null — сервер ще без v13 (або немає мережі). */
+export async function loadState(rev: number): Promise<CloudState | null> {
+  if (!me || cloudOff) return null;
+  const { data, error } = await db().rpc('load_state', { p_rev: rev });
+  if (error) {
+    if (/load_state|schema cache|does not exist|Could not find/.test(error.message)) cloudOff = true;
+    return null;
+  }
+  return { ...(data as CloudState), rev: Number((data as CloudState).rev) };
+}
+
+export async function saveState(state: unknown, rev: number): Promise<{ ok: boolean; rev: number; state?: Record<string, unknown> | null }> {
+  const { data, error } = await db().rpc('save_state', { p_state: state, p_rev: rev });
+  if (error) throw error;
+  return { ...data, rev: Number(data.rev) };
+}
+
+export function cloudStateOn() {
+  return !cloudOff && !!me;
+}
+
+/** credit — додати в грі (сервер ще не має мого стану), total — для сповіщення. */
+export async function claimTransfers2(): Promise<{ credit: number; total: number }> {
+  if (!me) return { credit: 0, total: 0 };
+  const { data, error } = await db().rpc('claim_transfers2');
+  if (error) {
+    if (/claim_transfers2/.test(error.message)) {
+      const got = await claimTransfers();
+      return { credit: got, total: got };
+    }
+    throw error;
+  }
+  return { credit: Number(data?.credit ?? 0), total: Number(data?.total ?? 0) };
+}
+
+export async function adminStats(): Promise<{ players: number; online: number; today: number; banned: number; coins: number }> {
+  const { data, error } = await db().rpc('admin_stats');
+  if (error) throw error;
+  return data;
+}
+
+export async function plateReserve(plate: string, value: number): Promise<boolean> {
+  const { data, error } = await db().rpc('plate_reserve', { p_plate: plate, p_value: value });
+  if (error) throw error;
+  return !!data;
+}
+
+export async function plateRelease(plate: string) {
+  const { error } = await db().rpc('plate_release', { p_plate: plate });
+  if (error) throw error;
+}
+
+export async function showPlate(plate: string | null) {
+  if (!me) return;
+  await db().from('profiles').update({ plate }).eq('id', me.id);
+}
+
+// Смертельна рулетка (дуель).
+export interface RouletteTable {
+  id: number;
+  duel_id: number | null;
+  a: string;
+  b: string;
+  stake: number;
+  coin: number;
+  holder: number;
+  shots: number;
+  last: 'shoot' | 'self' | 'shoot_fire' | 'self_fire' | 'timeout' | null;
+  bonus_a: number;
+  bonus_b: number;
+  winner: number | null;
+  status: 'playing' | 'finished';
+  version: number;
+  updated_at: string;
+}
+
+export async function rouletteOpen(duelId: number): Promise<RouletteTable> {
+  const { data, error } = await db().rpc('roulette_open', { p_duel: duelId });
+  if (error) throw error;
+  return data as RouletteTable;
+}
+
+export async function rouletteGet(id: number): Promise<RouletteTable | null> {
+  const { data, error } = await db().from('roulette_tables').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data as RouletteTable | null;
+}
+
+export async function rouletteAct(id: number, version: number, self: boolean): Promise<RouletteTable> {
+  const { data, error } = await db().rpc('roulette_act', { p_id: id, p_version: version, p_self: self });
+  if (error) throw error;
+  return data as RouletteTable;
+}
+
+export async function rouletteClaim(id: number): Promise<RouletteTable> {
+  const { data, error } = await db().rpc('roulette_claim', { p_id: id });
+  if (error) throw error;
+  return data as RouletteTable;
 }

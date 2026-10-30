@@ -7,7 +7,7 @@ import {
   Duel,
   DurakLobbyRow,
   DurakTable,
-  claimTransfers,
+  claimTransfers2,
   durakCancel,
   durakClaim,
   durakByDuel,
@@ -288,9 +288,9 @@ export function OnlineDurak({ game, duel, onClose }: { game: GameInfo; duel?: Du
 
   const collect = useCallback(async () => {
     for (let k = 0; k < 3; k++) {
-      const got = await claimTransfers().catch(() => 0);
+      const { credit, total: got } = await claimTransfers2().catch(() => ({ credit: 0, total: 0 }));
       if (got > 0) {
-        wallet.credit(got);
+        if (credit > 0) wallet.credit(credit);
         return got;
       }
       await new Promise((r) => setTimeout(r, 1000));

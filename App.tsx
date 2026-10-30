@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
-import { useToast } from './src/state/toast';
+import { hideToast, useToast } from './src/state/toast';
+import { onNav, peekNav } from './src/state/nav';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -102,12 +103,22 @@ function Shell() {
     return () => clearInterval(t);
   }, [wallet.notify]);
 
+  // Легка поява нового розділу. Без повного затемнення до нуля, щоб екран не блимав.
   useEffect(() => {
     if (getSettings().lite) return;
-    if (getSettings().lite) return;
-    fade.setValue(0);
-    Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    fade.setValue(0.75);
+    Animated.timing(fade, { toValue: 1, duration: 160, useNativeDriver: true }).start();
   }, [tab, gameId, fade]);
+
+  // Сповіщення про повідомлення чи дуель відкриває «Друзі».
+  useEffect(() => {
+    const go = () => {
+      setGameId(null);
+      setTab('friends');
+    };
+    if (peekNav()) go();
+    return onNav(go);
+  }, []);
 
   const back = () => {
     if (gameId) {
@@ -135,6 +146,21 @@ function Shell() {
     wallet.openGame(id);
     setGameId(id);
   };
+
+  if (wallet.banned) {
+    const forever = new Date(wallet.banned.until).getFullYear() > 9000 || !isFinite(new Date(wallet.banned.until).getTime());
+    return (
+      <SafeAreaView style={[styles.screen, styles.ban]}>
+        <StatusBar style="light" />
+        <Text style={styles.banIcon}>⛔</Text>
+        <Text style={styles.banTitle}>Тебе заблоковано</Text>
+        <Text style={styles.banText}>
+          {forever ? 'Назавжди' : `До ${new Date(wallet.banned.until).toLocaleString('uk-UA', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`}
+        </Text>
+        {!!wallet.banned.note && <Text style={styles.banText}>Причина: {wallet.banned.note}</Text>}
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
@@ -211,6 +237,10 @@ export default function App() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  ban: { alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
+  banIcon: { fontSize: 72 },
+  banTitle: { color: colors.red, fontSize: 24, fontWeight: '900' },
+  banText: { color: colors.muted, fontSize: 15, textAlign: 'center' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,6 +289,12 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   toastText: { color: '#FFFFFF', fontWeight: '800', textAlign: 'center' },
+  toastHint: { color: 'rgba(255,255,255,0.75)', fontSize: 11, textAlign: 'center', marginTop: 3 },
+  toastActions: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  toastBtn: { paddingVertical: 9, paddingHorizontal: 18, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.3)' },
+  toastBtnPrimary: { backgroundColor: colors.gold },
+  toastBtnText: { color: '#FFFFFF', fontWeight: '900' },
+  toastBtnTextPrimary: { color: '#1A1300' },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
@@ -275,9 +311,35 @@ const styles = StyleSheet.create({
 function Toast() {
   const toast = useToast();
   if (!toast) return null;
+  const tappable = !!(toast.onPress || toast.actions?.length);
   return (
-    <View pointerEvents="none" style={styles.toast}>
-      <Text style={styles.toastText}>{toast}</Text>
+    <View pointerEvents={tappable ? 'box-none' : 'none'} style={styles.toast}>
+      <Pressable
+        disabled={!toast.onPress}
+        onPress={() => {
+          hideToast();
+          toast.onPress?.();
+        }}
+      >
+        <Text style={styles.toastText}>{toast.text}</Text>
+        {toast.onPress && !toast.actions?.length && <Text style={styles.toastHint}>Натисни, щоб відкрити</Text>}
+      </Pressable>
+      {!!toast.actions?.length && (
+        <View style={styles.toastActions}>
+          {toast.actions.map((a) => (
+            <Pressable
+              key={a.label}
+              style={[styles.toastBtn, a.primary && styles.toastBtnPrimary]}
+              onPress={() => {
+                hideToast();
+                a.onPress();
+              }}
+            >
+              <Text style={[styles.toastBtnText, a.primary && styles.toastBtnTextPrimary]}>{a.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
