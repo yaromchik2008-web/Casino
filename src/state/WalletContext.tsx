@@ -47,8 +47,8 @@ export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
 // Промокоди в копійках. Одноразові, крім тих, що в REUSABLE_PROMOS (за бажанням ghj усі поточні багаторазові).
-const PROMO_CODES: Record<string, number> = { sosunok: 100000, salo: 1000000 };
-const REUSABLE_PROMOS = ['sosunok', 'salo', 'ben'];
+const PROMO_CODES: Record<string, number> = { salo: 1000000 };
+const REUSABLE_PROMOS = ['salo', 'ben'];
 // Жартівливі коди, що обнуляють баланс (за бажанням ghj).
 const RESET_PROMOS = ['ben'];
 export const CASHBACK_RATE = 0.02;
