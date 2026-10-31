@@ -35,8 +35,9 @@ export function digitsTier(d: string): PlateTier {
   if (a === 0 && b === 0 && c === 0 && e >= 2 && e !== 6) return TIERS.elite;
   const ascending = b === a + 1 && c === b + 1 && e === c + 1;
   const twoPairs = a === b && c === e && a !== c;
-  const threeEnd = b === c && c === e && a !== b;
-  if (ascending || twoPairs || threeEnd) return TIERS.pairs;
+  // Три однакові цифри підряд на початку чи в кінці: 2223, 2111.
+  const three = ((a === b && b === c) || (b === c && c === e)) && d !== '0006' && d !== '6666';
+  if (ascending || twoPairs || three) return TIERS.pairs;
   if (d === '0006' || d === '6666' || (a === 0 && b === 0 && c !== e)) return TIERS.zeros;
   const mirror = a === e && b === c;
   const repeat = a === c && b === e;
