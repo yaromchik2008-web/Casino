@@ -21,6 +21,7 @@ import {
   respondDuel,
   sendMessage,
   submitDuelScore,
+  listDuels,
 } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
 import { colors, formatCoins } from '../theme';
@@ -307,12 +308,46 @@ function ScoreDuelPlay({ duel, opponentName, onClose, game }: { duel: Duel; oppo
     setStatus('Відправляю результат…');
     try {
       await submitDuelScore(duel.id, points);
-      setStatus(`Результат зараховано. Коли ${opponentName} зіграє, переможець отримає ${formatCoins(duel.stake * 2)}`);
-      sfx('win');
+      setStatus(`Результат зараховано. Чекаємо, поки зіграє ${opponentName}…`);
+      setWaiting(true);
     } catch (e) {
       setStatus(friendlyError(e));
     }
   };
+
+  // Після свого ходу стежимо за дуеллю, поки суперник не зіграє, і одразу показуємо підсумок.
+  const [waiting, setWaiting] = useState(false);
+  const [outcome, setOutcome] = useState<{ kind: 'win' | 'lose' | 'draw'; mine: number; theirs: number } | null>(null);
+  useEffect(() => {
+    if (!waiting) return;
+    let stop = false;
+    const check = async () => {
+      try {
+        const d = (await listDuels()).find((x) => x.id === duel.id);
+        const me = myProfile();
+        if (stop || !d || !me || d.status !== 'finished') return;
+        const iAmChallenger = d.challenger === me.id;
+        const mine = Number((iAmChallenger ? d.challenger_score : d.opponent_score) ?? 0);
+        const theirs = Number((iAmChallenger ? d.opponent_score : d.challenger_score) ?? 0);
+        const kind = d.winner === me.id ? 'win' : d.winner ? 'lose' : 'draw';
+        setOutcome({ kind, mine, theirs });
+        setWaiting(false);
+        if (kind === 'win') {
+          sfx('bigwin');
+          haptic('win');
+        } else sfx(kind === 'lose' ? 'lose' : 'click');
+      } catch {
+        // Спробуємо ще раз.
+      }
+    };
+    check();
+    const t = setInterval(check, 3000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting]);
 
   // Вихід посеред раунду зараховує 0, щоб не перегравати до вдалої спроби.
   const leave = () => {
@@ -335,9 +370,30 @@ function ScoreDuelPlay({ duel, opponentName, onClose, game }: { duel: Duel; oppo
       <ScrollView contentContainerStyle={styles.content}>
         {score != null ? (
           <Panel style={styles.result}>
-            <Text style={styles.big}>{blocked ? '⏹️' : '🏁'}</Text>
-            <Text style={styles.title}>{blocked ? 'Раунд було перервано' : `Твій результат: ${score} очок`}</Text>
-            {status && <Text style={styles.mutedCenter}>{status}</Text>}
+            {outcome ? (
+              <>
+                <Text style={styles.big}>{outcome.kind === 'win' ? '🏆' : outcome.kind === 'lose' ? '😵' : '🤝'}</Text>
+                <Text style={[styles.title, { color: outcome.kind === 'win' ? colors.green : outcome.kind === 'lose' ? colors.red : colors.text }]}>
+                  {outcome.kind === 'win' ? 'ТИ ВИГРАВ!' : outcome.kind === 'lose' ? 'ТИ ПРОГРАВ' : 'НІЧИЯ'}
+                </Text>
+                <Text style={styles.title}>
+                  Ти {outcome.mine} : {outcome.theirs} {opponentName}
+                </Text>
+                <Text style={styles.mutedCenter}>
+                  {outcome.kind === 'win'
+                    ? `Виграш ${formatCoins(duel.stake * 2)} уже на балансі`
+                    : outcome.kind === 'lose'
+                      ? `${opponentName} забирає банк ${formatCoins(duel.stake * 2)}`
+                      : 'Ставки повернуто обом'}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.big}>{blocked ? '⏹️' : '🏁'}</Text>
+                <Text style={styles.title}>{blocked ? 'Раунд було перервано' : `Твій результат: ${score} очок`}</Text>
+                {status && <Text style={styles.mutedCenter}>{status}</Text>}
+              </>
+            )}
             <BigButton label="ДО ДРУЗІВ" onPress={onClose} />
           </Panel>
         ) : isNumber ? (
