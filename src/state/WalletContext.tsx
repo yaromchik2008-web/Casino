@@ -24,6 +24,7 @@ import { friendsEnabled } from '../config';
 import { AppState, Platform } from 'react-native';
 import { PICKAXES } from '../games/mineEngine';
 import { findGame } from '../games/catalog';
+import { plateTier } from '../games/plateEngine';
 
 // Бонус до виграшів прибрано на прохання ghj (2026-10-31): гра знову віддає менше, ніж забирає.
 // Слоти, шахта й каскади ≈ 0.86–0.92, швидкі й настільні ≈ 0.95–0.99.
@@ -123,6 +124,9 @@ function initialState(): PlayerState {
 // Скидає щоденні завдання і закриває минулий турнір, коли настає новий день або тиждень.
 function rollPeriods(s: PlayerState, notes: string[]): PlayerState {
   let next = s;
+  // Номери, що подорожчали після зміни правил, одразу коштують по-новому.
+  if ((next.plates ?? []).some((x) => plateTier(x.id).value > x.value))
+    next = { ...next, plates: next.plates!.map((x) => ({ ...x, value: Math.max(x.value, plateTier(x.id).value) })) };
   const today = dayId();
   if (next.missionDay !== today) {
     next = { ...next, missionDay: today, missionProgress: {}, missionPlayed: [], missionClaimed: [] };
