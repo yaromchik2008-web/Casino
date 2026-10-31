@@ -61,6 +61,8 @@ begin
     return jsonb_build_object('ok', false, 'rev', p.state_rev, 'state', p.state);
   end if;
 
+  -- «Скинути прогрес» можна лише раз: позначку про скидання гра стерти не може.
+  if p.state ? 'lastResetAt' then p_state := jsonb_set(p_state, '{lastResetAt}', p.state->'lastResetAt'); end if;
   old_bal := coalesce(round((p.state->>'balance')::numeric)::bigint, p.balance, 0);
   new_bal := greatest(0, coalesce(round((p_state->>'balance')::numeric)::bigint, old_bal));
   if p.gain_since is null or p.gain_since < now() - interval '1 hour' then

@@ -25,13 +25,10 @@ import { AppState, Platform } from 'react-native';
 import { PICKAXES } from '../games/mineEngine';
 import { findGame } from '../games/catalog';
 
-// Слоти, шахта й каскади віддають ≈ 0.89–0.92, з бонусом ≈ 1.01–1.05; швидкі й настільні ≈ 0.95–0.99, з бонусом ≈ 1.01–1.05.
-const SLOT_KINDS = ['slot', 'tumble', 'holdwin', 'dig'];
-export function winBoost(gameId: string) {
-  const g = findGame(gameId);
-  if (!g) return 1;
-  // Слоти ×1.18: ретригер з рідшим scatter у фриспінах забрав ≈ 4 % RTP, тож бонус трохи більший.
-  return g.kind === 'slot' ? 1.18 : SLOT_KINDS.includes(g.kind) ? 1.14 : 1.06;
+// Бонус до виграшів прибрано на прохання ghj (2026-10-31): гра знову віддає менше, ніж забирає.
+// Слоти, шахта й каскади ≈ 0.86–0.92, швидкі й настільні ≈ 0.95–0.99.
+export function winBoost(_gameId: string) {
+  return 1;
 }
 
 const KEY = 'freecasino:player:v3';
@@ -43,7 +40,6 @@ const PUSH_DELAY_MS = 1500;
 export const START_BALANCE = 30000; // усі суми в копійках: 30000 = 300,00 ₴
 export const HOURLY_BONUS = 2000;
 export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000;
-export const RESET_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 export const WHEEL_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 export const DAILY_REWARDS = [1000, 1500, 2000, 3000, 4000, 5000, 10000];
 export const JACKPOT_SEED = 100000;
@@ -751,10 +747,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
-  // Скидання дає стартові 300 ₴, але лише раз на 6 годин, і не обнуляє таймери бонусів.
+  // Скидання дає стартові 300 ₴, але лише один раз на акаунт, і не обнуляє таймери бонусів.
   const reset = useCallback(() => {
     const old = stateRef.current;
-    if (Date.now() - (old.lastResetAt ?? 0) < RESET_COOLDOWN_MS) return false;
+    if (old.lastResetAt) return false;
     const fresh: PlayerState = {
       ...initialState(),
       lastResetAt: Date.now(),
