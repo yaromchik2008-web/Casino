@@ -507,10 +507,10 @@ export function MineGame({
             ))}
             <Text style={styles.sub}>Особливі блоки</Text>
             <Text style={styles.small}>🧨 Динаміт: вибухає після короткого ґнота й розбиває все навколо</Text>
-            <Text style={styles.small}>🟩 Слиз: підкидає кирку вгору</Text>
+            <Text style={styles.small}>🟩 Слиз: підкидає кирку вгору, і вона з розгону проламує кілька блоків підряд</Text>
             <Text style={styles.small}>⬆️ Ящик покращення: кирка стає кращою на рівень і відновлює HP</Text>
             <Text style={styles.small}>➕ Ящик ремонту: відновлює 40% HP кирки</Text>
-            <Text style={styles.small}>⬛ Бедрок: не ламається</Text>
+            <Text style={styles.small}>⬛ Обсидіан: дуже міцний, але ламається від кирки й динаміту</Text>
             <Text style={styles.sub}>Стартова кирка</Text>
             {PICKS.map((p, i) => (
               <View key={p.name} style={styles.oreRow}>

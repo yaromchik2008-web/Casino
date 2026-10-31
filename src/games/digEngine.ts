@@ -42,7 +42,7 @@ const CELL_HP: Record<Cell, number> = {
   slime: 1,
   upgrade: 1,
   repair: 1,
-  bedrock: Infinity,
+  bedrock: 20,
 };
 export const cellHp = (c: Cell) => CELL_HP[c];
 
@@ -60,7 +60,7 @@ const HIT_COST: Record<Cell, number> = {
   slime: 0,
   upgrade: 0,
   repair: 0,
-  bedrock: 3,
+  bedrock: 5,
 };
 
 export const PICKS = [
@@ -70,9 +70,12 @@ export const PICKS = [
   { name: 'Алмазна кирка', hp: 400, power: 2, weight: 2.7, color: '#4FE3E3' },
 ];
 const DAMAGE = 2.5; // × сила кирки за удар
+// Після відскоку від слизу кілька ударів б'ють сильно і кирка пролітає крізь зламані блоки.
+const SMASH_HITS = 4;
+const SMASH_MULT = 4;
 
-/** Множник руди, підібраний симуляцією під RTP ≈ 0.9. */
-export let VALUE_SCALE = 1;
+/** Множник руди, підібраний симуляцією під RTP ≈ 0.89. */
+export let VALUE_SCALE = 1.2; // бічні удари й міцний чорний блок забирають більше HP кирки
 export function setValueScale(k: number) {
   VALUE_SCALE = k;
 }
@@ -227,6 +230,7 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
   let vy = 0;
   let angle = 0;
   let cooldown = 0;
+  let smash = 0;
   let value = 0;
   let depth = 0;
   let time = 0;
@@ -268,7 +272,7 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
         const cc = col + dc;
         if (rr < 0 || cc < 0 || cc >= COLS) continue;
         const j = rr * COLS + cc;
-        if (broken[j] || cells[j] === 'bedrock') continue;
+        if (broken[j]) continue;
         if (cells[j] === 'tnt' && j !== i) {
           if (!fuses.some((q) => q.i === j)) fuses.push({ i: j, at: time + 0.25 });
           continue;
@@ -296,6 +300,7 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
       broken[i] = true;
       vy = -15;
       vx += (rand() - 0.5) * 4;
+      smash = SMASH_HITS;
       events.push({ ...base, kind: 'slime', broken: [i], pickHp });
       return;
     }
@@ -314,17 +319,16 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
       return;
     }
     pickHp = Math.max(0, pickHp - HIT_COST[c]);
-    if (c === 'bedrock') {
-      events.push({ ...base, kind: 'bedrock', pickHp });
-      return;
-    }
+    // Після слизу кирка летить униз з розгону і б'є в рази сильніше.
+    const power = DAMAGE * PICKS[tier].power * (smash > 0 ? SMASH_MULT : 1);
+    if (smash > 0) smash--;
     if (c === 'tnt') {
       if (!fuses.some((q) => q.i === i)) fuses.push({ i, at: time + 0.6 });
       events.push({ ...base, kind: 'fuse', pickHp });
       return;
     }
     if (isOre(c)) {
-      hp[i] = Math.max(0, hp[i] - DAMAGE * PICKS[tier].power);
+      hp[i] = Math.max(0, hp[i] - power);
       if (hp[i] > 0) {
         events.push({ ...base, kind: 'hit', hp: hp[i], pickHp });
         return;
@@ -349,7 +353,7 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
       events.push({ ...base, kind: 'vein', broken: vein, paid, value: v, pickHp });
       return;
     }
-    hp[i] = Math.max(0, hp[i] - DAMAGE * PICKS[tier].power);
+    hp[i] = Math.max(0, hp[i] - power);
     if (hp[i] <= 0) {
       broken[i] = true;
       events.push({ ...base, kind: 'break', broken: [i], pickHp });
@@ -407,6 +411,7 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
           x = nx0 + nx * r;
           y = ny0 + ny * r;
           const vn = vx * nx + vy * ny;
+          const before = [vx, vy];
           if (vn < 0) {
             vx -= 1.5 * vn * nx;
             vy -= 1.5 * vn * ny;
@@ -415,9 +420,17 @@ export function simulate(tier0: number, rand: () => number = Math.random): DigRu
             vy = Math.min(vy, -(3 + rand() * 2.5));
             vx = Math.max(-4, Math.min(4, vx + (rand() - 0.5) * 3.5));
           }
-          if (cooldown <= 0 && (vn < -1 || ny < -0.5)) {
+          // Бічний дотик теж б'є блок, навіть коли кирка лише ковзає вздовж нього.
+          const side = Math.abs(nx) > 0.6;
+          if (cooldown <= 0 && (vn < -0.3 || ny < -0.5 || side)) {
             cooldown = 0.13;
+            const smashing = smash > 0 && ny < -0.5;
             strike(i);
+            if (smashing && broken[i]) {
+              // Проламала блок з розгону: летить далі вниз, не відскакуючи.
+              vx = before[0];
+              vy = Math.max(before[1], 8);
+            }
           }
         }
       }
