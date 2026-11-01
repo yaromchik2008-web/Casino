@@ -30,6 +30,7 @@ const HELP = [
   'rename КОД ІМ’Я      — змінити ім’я гравцю',
   'all ТЕКСТ            — повідомлення всім гравцям',
   'online               — хто зараз у мережі',
+  'seen [КОД]           — коли гравці востаннє заходили',
   'stats                — статистика гри',
   'suspects             — хто намагався накрутити гроші',
   'clear                — очистити екран',
@@ -232,6 +233,21 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
       case 'online': {
         const list = (await refresh()).filter((p) => p.online);
         out(...list.map((p) => `🟢 ${p.code}  ${p.name}`), `${list.length} у мережі`);
+        break;
+      }
+      case 'seen': {
+        const ago = (iso: string) => {
+          const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+          if (min < 2) return 'зараз у грі';
+          if (min < 60) return `${min} хв тому`;
+          if (min < 24 * 60) return `${Math.floor(min / 60)} год тому`;
+          return new Date(iso).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        };
+        const c = a1 ? resolve(a1) : '';
+        const list = [...(await refresh(c))]
+          .filter((p) => !c || p.code === c)
+          .sort((x, y) => new Date(y.updated_at).getTime() - new Date(x.updated_at).getTime());
+        out(...list.slice(0, 40).map((p) => `${p.online ? '🟢' : '⚪'} ${p.code}  ${p.name} · ${ago(p.updated_at)}`), list.length ? `${list.length} гравців` : '✖ не знайдено');
         break;
       }
       case 'stats':
