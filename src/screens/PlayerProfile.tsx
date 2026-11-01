@@ -6,8 +6,20 @@ import { SHOP_CATEGORIES, assetsValue, findItem, hourlyIncome, topCar } from '..
 import { colors, formatCoins } from '../theme';
 
 /** Профіль іншого гравця: статус, рахунок і все його майно. */
-export function PlayerProfile({ id, name, onClose }: { id: string; name?: string; onClose: () => void }) {
+export function PlayerProfile({
+  id,
+  name,
+  onClose,
+  onRemove,
+}: {
+  id: string;
+  name?: string;
+  onClose: () => void;
+  /** Є лише для друзів: кнопка «Видалити з друзів» унизу. */
+  onRemove?: () => Promise<void>;
+}) {
   const [p, setP] = useState<Profile | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,6 +82,21 @@ export function PlayerProfile({ id, name, onClose }: { id: string; name?: string
               );
             })}
             <BigButton label="ЗАКРИТИ" color={colors.surfaceAlt} onPress={onClose} />
+            {onRemove && (
+              <BigButton
+                label={confirmRemove ? 'ТОЧНО ВИДАЛИТИ? НАТИСНИ ЩЕ РАЗ' : 'ВИДАЛИТИ З ДРУЗІВ'}
+                color={confirmRemove ? colors.red : colors.surface}
+                onPress={async () => {
+                  if (!confirmRemove) return setConfirmRemove(true);
+                  try {
+                    await onRemove();
+                    onClose();
+                  } catch (e) {
+                    setError(friendlyError(e));
+                  }
+                }}
+              />
+            )}
           </ScrollView>
         </Pressable>
       </Pressable>

@@ -49,7 +49,6 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
   const [showSend, setShowSend] = useState(false);
   const [showDuel, setShowDuel] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
 
@@ -107,7 +106,17 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
         <Pressable onPress={onBack} hitSlop={10}>
           <Text style={styles.back}>‹ Друзі</Text>
         </Pressable>
-        {showProfile && <PlayerProfile id={friend.id} name={friend.name} onClose={() => setShowProfile(false)} />}
+        {showProfile && (
+          <PlayerProfile
+            id={friend.id}
+            name={friend.name}
+            onClose={() => setShowProfile(false)}
+            onRemove={async () => {
+              await removeFriend(friend.id);
+              onBack();
+            }}
+          />
+        )}
         <Pressable style={styles.flex} onPress={() => setShowProfile(true)}>
           <Text style={styles.chatName}>{friend.name} 👤</Text>
           <Text style={styles.muted}>
@@ -176,20 +185,6 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
         />
         <BigButton label="➤" style={styles.sendBtn} onPress={send} />
       </View>
-      <Pressable
-        style={styles.remove}
-        onPress={async () => {
-          if (!confirmRemove) return setConfirmRemove(true);
-          try {
-            await removeFriend(friend.id);
-            onBack();
-          } catch (e) {
-            setError(friendlyError(e));
-          }
-        }}
-      >
-        <Text style={styles.removeText}>{confirmRemove ? 'Точно видалити з друзів? Натисни ще раз' : 'Видалити з друзів'}</Text>
-      </Pressable>
     </View>
   );
 }
@@ -383,7 +378,17 @@ export function FriendsScreen() {
         {error && <Text style={styles.error}>{error}</Text>}
       </Panel>
 
-      {profileOf && <PlayerProfile id={profileOf.id} name={profileOf.name} onClose={() => setProfileOf(null)} />}
+      {profileOf && (
+        <PlayerProfile
+          id={profileOf.id}
+          name={profileOf.name}
+          onClose={() => setProfileOf(null)}
+          onRemove={async () => {
+            await removeFriend(profileOf.id);
+            refresh();
+          }}
+        />
+      )}
       <DuelList duels={duels} friends={friends} onPlay={setPlaying} onChanged={refreshDuels} onError={setError} />
 
       <Text style={styles.title}>Друзі ({friends.length})</Text>
@@ -484,6 +489,4 @@ const styles = StyleSheet.create({
   time: { color: 'rgba(255,255,255,0.6)', fontSize: 10, alignSelf: 'flex-end', marginTop: 2 },
   gift: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   giftText: { fontSize: 22 },
-  remove: { alignItems: 'center', paddingVertical: 8 },
-  removeText: { color: colors.muted, fontSize: 12 },
 });
