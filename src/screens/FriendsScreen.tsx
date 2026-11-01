@@ -12,6 +12,7 @@ import {
   listDuels,
   friendlyError,
   listFriends,
+  fetchDuel,
   ChatInfo,
   chatSummary,
   markRead,
@@ -204,7 +205,6 @@ export function FriendsScreen() {
   const [chat, setChat] = useState<Profile | null>(null);
   const [duels, setDuels] = useState<Duel[]>([]);
   const [playing, setPlaying] = useState<Duel | null>(null);
-  const autoOpened = useRef(new Set<number>());
   const [profileOf, setProfileOf] = useState<Profile | null>(null);
 
   const [chats, setChats] = useState<Record<string, ChatInfo>>({});
@@ -226,17 +226,6 @@ export function FriendsScreen() {
     listDuels()
       .then((list) => {
         setDuels(list);
-        // Друг прийняв мій виклик: гра починається одразу.
-        const uid = myProfile()?.id;
-        const ready = list.find(
-          (d) => d.challenger === uid && d.status === 'accepted' && d.challenger_score == null && !autoOpened.current.has(d.id),
-        );
-        if (ready) {
-          autoOpened.current.add(ready.id);
-          setChat(null);
-          setPlaying((cur) => cur ?? ready);
-          sfx('bonus');
-        }
       })
       .catch(() => {});
     claimTransfers2()
@@ -268,7 +257,15 @@ export function FriendsScreen() {
         }
         sfx('bonus');
         setChat(null);
-        setPlaying({ ...d, status: 'accepted' });
+        // Свіжий запис із сервера: за часом прийняття обидва гравці стартують одночасно.
+        setPlaying((await fetchDuel(d.id)) ?? { ...d, status: 'accepted', accepted_at: new Date().toISOString() });
+      } else if (r.playDuel) {
+        const d = await fetchDuel(r.playDuel);
+        if (d && d.status === 'accepted') {
+          sfx('bonus');
+          setChat(null);
+          setPlaying((cur) => cur ?? d);
+        }
       } else if (r.chat) {
         const f = (await listFriends()).find((x) => x.id === r.chat) ?? (await loadProfile(r.chat));
         if (f) {

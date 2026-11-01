@@ -21,6 +21,7 @@ import {
   respondDuel,
   sendMessage,
   submitDuelScore,
+  fetchDuel,
   listDuels,
 } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
@@ -166,7 +167,7 @@ export function DuelList({
         throw e;
       }
       sfx('bonus');
-      onPlay({ ...d, status: 'accepted' });
+      onPlay((await fetchDuel(d.id)) ?? { ...d, status: 'accepted', accepted_at: new Date().toISOString() });
     });
 
   const refundNow = async () => {
@@ -237,7 +238,42 @@ export function DuelPlay({ duel, opponentName, onClose }: { duel: Duel; opponent
   const game = findGame(duel.game);
   if (duel.game === ROULETTE_DUEL) return <RouletteDuel duel={duel} opponentName={opponentName} onClose={onClose} />;
   if (duel.game === 'durak' && game) return <DurakDuel duel={duel} game={game} opponentName={opponentName} onClose={onClose} />;
-  return <ScoreDuelPlay duel={duel} opponentName={opponentName} onClose={onClose} game={game} />;
+  return <SyncStart duel={duel} opponentName={opponentName} onClose={onClose} game={game} />;
+}
+
+const START_DELAY_MS = 4000;
+
+/** Обидва гравці стартують в одну мить: через 4 с після того, як друг прийняв виклик (час із сервера). */
+function SyncStart(props: { duel: Duel; opponentName: string; onClose: () => void; game?: GameInfo }) {
+  const [startAt] = useState(() => {
+    const t = Date.parse(props.duel.accepted_at ?? props.duel.updated_at) + START_DELAY_MS;
+    // Якщо годинник телефона сильно збитий, просто чекаємо стандартні 4 с.
+    return Number.isFinite(t) && t - Date.now() <= START_DELAY_MS + 1000 ? t : Date.now() + START_DELAY_MS;
+  });
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (now >= startAt) return;
+    const t = setTimeout(() => setNow(Date.now()), Math.min(250, startAt - now));
+    return () => clearTimeout(t);
+  }, [now, startAt]);
+  if (now >= startAt) return <ScoreDuelPlay {...props} />;
+  const left = Math.ceil((startAt - now) / 1000);
+  return (
+    <View style={styles.flex}>
+      <View style={styles.bar}>
+        <Pressable onPress={props.onClose} hitSlop={10}>
+          <Text style={styles.back}>‹ Друзі</Text>
+        </Pressable>
+        <Text style={styles.barTitle} numberOfLines={1}>
+          ⚔️ {props.opponentName} · {formatCoins(props.duel.stake)}
+        </Text>
+      </View>
+      <View style={styles.countdown}>
+        <Text style={styles.mutedCenter}>Дуель починається одночасно в обох</Text>
+        <Text style={styles.countNum}>{left}</Text>
+      </View>
+    </View>
+  );
 }
 
 /** Дуель у дурака: жива партія за столом, без таймера на хвилину. */
@@ -573,6 +609,8 @@ const styles = StyleSheet.create({
   barTitle: { color: colors.text, fontSize: 16, fontWeight: '900', flex: 1 },
   result: { alignItems: 'center', gap: 10 },
   big: { fontSize: 48 },
+  countdown: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  countNum: { color: colors.gold, fontSize: 96, fontWeight: '900' },
   numberBox: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: 28 },
   number: { color: colors.gold, fontSize: 96, fontWeight: '900' },
   slot: { gap: 14, alignItems: 'center' },

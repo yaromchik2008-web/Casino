@@ -364,6 +364,25 @@ export async function listDuels(): Promise<Duel[]> {
   return (data ?? []) as Duel[];
 }
 
+/** Мої виклики, які друг щойно прийняв (легкий запит без settle_duels, для швидкого старту). */
+export async function acceptedChallenges(): Promise<Duel[]> {
+  if (!me) return [];
+  const { data, error } = await db()
+    .from('duels')
+    .select('*')
+    .eq('challenger', me.id)
+    .eq('status', 'accepted')
+    .is('challenger_score', null)
+    .gt('updated_at', new Date(Date.now() - 90_000).toISOString());
+  if (error) return [];
+  return (data ?? []) as Duel[];
+}
+
+export async function fetchDuel(id: number): Promise<Duel | null> {
+  const { data } = await db().from('duels').select('*').eq('id', id).maybeSingle();
+  return (data as Duel) ?? null;
+}
+
 export async function createDuel(opponent: string, game: string, stake: number) {
   const { error } = await db().rpc('create_duel', { p_opponent: opponent, p_game: game, p_stake: Math.round(stake) });
   if (error) throw error;

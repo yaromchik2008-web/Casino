@@ -7,7 +7,7 @@ import { formatCoins } from '../theme';
 import { sfx } from '../audio/sound';
 import { showToast } from './toast';
 import { requestNav } from './nav';
-import { claimReferral, listDuels, respondDuel, friendlyError, claimTransfers, claimTransfers2, cloudStateOn, inboxSince, takeAdminActions, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
+import { acceptedChallenges, claimReferral, listDuels, respondDuel, friendlyError, claimTransfers, claimTransfers2, cloudStateOn, inboxSince, takeAdminActions, takeBalanceOverride, myProfile, reportTourney, startFriends, syncProfile, tourneyRound } from './friends';
 import { assetsValue, statusFor } from './shop';
 import { useWallet } from './WalletContext';
 
@@ -92,6 +92,17 @@ export function useFriendSync() {
         ref.current.notify(`👥 Зараховано ${formatCoins(got.total)}: подарунок, дуель або турнір`);
       }
     };
+    // Друг прийняв мій виклик: одразу відкриваємо гру, де б я не був, щоб обидва стартували разом.
+    const opened = new Set<number>();
+    const accepted = async () => {
+      if (!myProfile() || stopped) return;
+      for (const d of await acceptedChallenges()) {
+        if (opened.has(d.id)) continue;
+        opened.add(d.id);
+        requestNav({ tab: 'friends', playDuel: d.id });
+      }
+    };
+    const acceptTimer = setInterval(() => void accepted(), 1500);
     // Спливаюче сповіщення, коли хтось пише або кличе на дуель.
     let since: string | null = null;
     const inbox = async () => {
@@ -141,6 +152,7 @@ export function useFriendSync() {
       stopped = true;
       clearInterval(t);
       clearInterval(ib);
+      clearInterval(acceptTimer);
     };
   }, [wallet.loaded]);
 }

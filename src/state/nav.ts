@@ -1,5 +1,5 @@
 // Переходи з будь-якого місця гри: сповіщення відкриває чат з другом або приймає дуель.
-export type NavRequest = { tab: 'friends'; chat?: string; acceptDuel?: number };
+export type NavRequest = { tab: 'friends'; chat?: string; acceptDuel?: number; playDuel?: number };
 
 let pending: NavRequest | null = null;
 const listeners = new Set<(r: NavRequest) => void>();
