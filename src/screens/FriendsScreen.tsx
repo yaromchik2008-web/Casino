@@ -12,13 +12,16 @@ import {
   listDuels,
   friendlyError,
   listFriends,
+  ChatInfo,
+  chatSummary,
+  markRead,
+  renameMe,
   loadMessages,
   myProfile,
   removeFriend,
   sendCoins,
   sendMessage,
   startFriends,
-  syncProfile,
 } from '../state/friends';
 import { useWallet } from '../state/WalletContext';
 import { onNav, takeNav } from '../state/nav';
@@ -51,7 +54,11 @@ function Chat({ friend, onBack }: { friend: Profile; onBack: () => void }) {
 
   const refresh = useCallback(() => {
     loadMessages(friend.id)
-      .then(setMessages)
+      .then((list) => {
+        setMessages(list);
+        // Відкритий чат: усе, що прийшло від друга, вже прочитано.
+        if (list.some((m) => m.sender === friend.id && m.read_at === null)) markRead(friend.id);
+      })
       .catch((e) => setError(friendlyError(e)));
   }, [friend.id]);
 
@@ -200,11 +207,19 @@ export function FriendsScreen() {
   const autoOpened = useRef(new Set<number>());
   const [profileOf, setProfileOf] = useState<Profile | null>(null);
 
+  const [chats, setChats] = useState<Record<string, ChatInfo>>({});
   const refresh = useCallback(() => {
     listFriends()
       .then(setFriends)
       .catch((e) => setError(friendlyError(e)));
+    chatSummary().then(setChats);
   }, []);
+  // Вгорі той, з ким листувались останнім; без листування — за балансом, як раніше.
+  const sorted = [...friends].sort((a, b) => {
+    const ta = chats[a.id]?.last_at ?? '';
+    const tb = chats[b.id]?.last_at ?? '';
+    return ta === tb ? b.balance - a.balance : ta < tb ? 1 : -1;
+  });
 
   // Дуелі оновлюються частіше, а виграш чи повернення ставки зараховується одразу.
   const refreshDuels = useCallback(() => {
@@ -280,7 +295,7 @@ export function FriendsScreen() {
         handleNav();
       })
       .catch((e) => setError(friendlyError(e)));
-    const t = setInterval(refresh, 15000);
+    const t = setInterval(refresh, 6000);
     const d = setInterval(refreshDuels, 5000);
     return () => (clearInterval(t), clearInterval(d));
   }, [refresh, refreshDuels]);
@@ -326,9 +341,10 @@ export function FriendsScreen() {
               label="OK"
               style={styles.smallBtn}
               onPress={async () => {
-                await syncProfile({ name: name.trim() || 'Гравець' });
+                const ok = await renameMe(name.trim() || 'Гравець');
                 setMe(myProfile());
                 setEditName(false);
+                setError(ok ? null : 'Розробник заборонив змінювати ім’я');
               }}
             />
           </View>
@@ -375,16 +391,29 @@ export function FriendsScreen() {
 
       <Text style={styles.title}>Друзі ({friends.length})</Text>
       {friends.length === 0 && <Text style={styles.empty}>Поки нікого. Додай друга за кодом!</Text>}
-      {friends.map((f, i) => (
-        <Pressable key={f.id} onPress={() => setChat(f)}>
+      {sorted.map((f, i) => {
+        const c = chats[f.id];
+        return (
+        <Pressable key={f.id} onPress={() => (setChats((all) => (all[f.id] ? { ...all, [f.id]: { ...all[f.id], unread: 0 } } : all)), setChat(f))}>
           <Panel style={styles.friend}>
             <Text style={styles.rank}>{i + 1}</Text>
             <View style={styles.flex}>
               <Text style={styles.friendName}>{f.name}</Text>
+              {c ? (
+                <Text style={[styles.preview, c.unread > 0 && styles.previewNew]} numberOfLines={1}>
+                  {c.last_from_me ? 'Ти: ' : ''}
+                  {c.last_body}
+                </Text>
+              ) : null}
               <Text style={styles.muted}>
                 {f.status} · ⭐ {f.level} · {seen(f.updated_at)}
               </Text>
             </View>
+            {c && c.unread > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{c.unread > 99 ? '99+' : c.unread}</Text>
+              </View>
+            )}
             <View style={styles.right}>
               <Text style={styles.balance}>{formatCoins(f.balance)}</Text>
               <View style={styles.actions}>
@@ -396,13 +425,18 @@ export function FriendsScreen() {
             </View>
           </Panel>
         </Pressable>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  preview: { color: colors.muted, fontSize: 13 },
+  previewNew: { color: colors.text, fontWeight: '800' },
+  badge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.red, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  badgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
   content: { padding: 16, paddingBottom: 32, gap: 12, width: '100%', maxWidth: 560, alignSelf: 'center' },
   hero: { alignItems: 'center', gap: 6 },
   big: { fontSize: 48 },

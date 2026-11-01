@@ -1,9 +1,10 @@
 import { ComponentRef, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { AdminKind, Profile, adminAct, adminPlayers, adminStats, adminSuspects, friendlyError, myProfile, takeAdminActions } from '../state/friends';
+import { AdminKind, Profile, adminAct, adminExtra, adminPlayers, adminStats, adminSuspects, friendlyError, myProfile, takeAdminActions } from '../state/friends';
 import { SHOP_ITEMS, findItem } from '../state/shop';
 import { useWallet } from '../state/WalletContext';
 import { formatCoins } from '../theme';
+import { plateTier } from '../games/plateEngine';
 
 // Термінал розробника: відкривається промокодом «hi» лише в гравця 777777.
 // Усі команди йдуть через сервер, який сам перевіряє права (docs/supabase-v12.sql, v13).
@@ -45,6 +46,9 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
   const [target, setTarget] = useState<Profile | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [plateOpen, setPlateOpen] = useState(false);
+  const [plateText, setPlateText] = useState('');
+  const [lockName, setLockName] = useState('');
   const [banMins, setBanMins] = useState('');
   const [banWhy, setBanWhy] = useState('');
   const [newName, setNewName] = useState('');
@@ -127,6 +131,25 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
         setPlayers((list) => list.map((p) => (p.id === before.id ? before : p)));
         setTarget((cur) => (cur?.id === before.id ? before : cur));
       }
+    }
+  };
+
+  // Замок на ім'я і видача номерів (docs/supabase-v17.sql).
+  const extra = async (p: Profile, kind: 'name_lock' | 'name_unlock' | 'plate_give', text?: string, value?: number) => {
+    try {
+      const name = await adminExtra(p.code, kind, text, value);
+      const patch: Partial<Profile> =
+        kind === 'name_lock' ? { name, name_locked: true } : kind === 'name_unlock' ? { name_locked: false } : {};
+      setPlayers((list) => list.map((x) => (x.id === p.id ? { ...x, ...patch } : x)));
+      setTarget((cur) => (cur?.id === p.id ? { ...cur, ...patch } : cur));
+      out(
+        kind === 'plate_give'
+          ? `✔ ${name} (${p.code}): номер ${text} · ${formatCoins(value ?? 0)}`
+          : `✔ ${name} (${p.code}): ${kind === 'name_lock' ? 'ім’я заблоковано' : 'ім’я знову можна змінювати'}`,
+      );
+      if (p.code === myCode) for (const a of await takeAdminActions()) wallet.adminApply(a);
+    } catch (e) {
+      out(`✖ ${friendlyError(e)}`);
     }
   };
 
@@ -347,6 +370,27 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
                   {banned(t) ? ` · ⛔ ${banText(t)}${t.ban_note ? ` (${t.ban_note})` : ''}` : ''}
                 </Text>
                 {t.code !== myCode && <Btn label="👥 ДОДАТИ В ДРУЗІ" onPress={() => act(t.code, 'friend_add')} />}
+                <Text style={styles.section}>ІМ’Я {t.name_locked ? '🔒 заблоковано' : '🔓 гравець може змінювати'}</Text>
+                <View style={styles.row}>
+                  <TextInput
+                    value={lockName}
+                    onChangeText={setLockName}
+                    maxLength={24}
+                    placeholder="нове ім’я (порожньо — лишити)"
+                    placeholderTextColor="#2F6B45"
+                    style={[styles.input, { flex: 1 }]}
+                  />
+                </View>
+                <View style={styles.row}>
+                  <Btn
+                    label="🔒 ЗАБЛОКУВАТИ"
+                    onPress={() => {
+                      extra(t, 'name_lock', lockName.trim() || undefined);
+                      setLockName('');
+                    }}
+                  />
+                  <Btn label="🔓 РОЗБЛОКУВАТИ" disabled={!t.name_locked} onPress={() => extra(t, 'name_unlock')} />
+                </View>
                 <View style={styles.row}>
                   <TextInput
                     value={amount}
@@ -383,7 +427,32 @@ export function AdminTerminal({ visible, onClose }: { visible: boolean; onClose:
                       </Pressable>
                     );
                   })}
+                  <Pressable onPress={() => setPlateOpen((o) => !o)} style={[styles.item, plateOpen && styles.itemOn]}>
+                    <Text style={styles.itemText}>🚘 Автономера</Text>
+                  </Pressable>
                 </View>
+                {plateOpen && (
+                  <View style={styles.row}>
+                    <TextInput
+                      value={plateText}
+                      onChangeText={(x) => setPlateText(x.toUpperCase())}
+                      maxLength={12}
+                      autoCapitalize="characters"
+                      placeholder="номер, напр. AA 7777 KA"
+                      placeholderTextColor="#2F6B45"
+                      style={[styles.input, { flex: 1 }]}
+                    />
+                    <Btn
+                      label={`ВИДАТИ · ${formatCoins(plateTier(plateText.trim().replace(/\s+/g, ' ')).value)}`}
+                      disabled={plateText.trim().length < 2}
+                      onPress={() => {
+                        const pl = plateText.trim().replace(/\s+/g, ' ');
+                        extra(t, 'plate_give', pl, plateTier(pl).value);
+                        setPlateText('');
+                      }}
+                    />
+                  </View>
+                )}
                 <View style={styles.row}>
                   <TextInput
                     value={note}

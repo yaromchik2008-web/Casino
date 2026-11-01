@@ -18,6 +18,7 @@ export interface Profile {
   online?: boolean;
   banned_until?: string | null;
   ban_note?: string | null;
+  name_locked?: boolean;
 }
 
 export interface Message {
@@ -26,6 +27,7 @@ export interface Message {
   receiver: string;
   body: string;
   created_at: string;
+  read_at?: string | null;
 }
 
 export type DuelStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'finished';
@@ -227,6 +229,47 @@ export async function syncProfile(fields: Partial<Pick<Profile, 'balance' | 'lev
     ({ data, error } = await send(rest));
   }
   if (!error && data) me = data as Profile;
+}
+
+/** Свій новий ім'я; false, якщо розробник заблокував зміну імені. */
+export async function renameMe(name: string): Promise<boolean> {
+  await syncProfile({ name });
+  return !me || me.name === name;
+}
+
+export async function adminExtra(code: string, kind: 'name_lock' | 'name_unlock' | 'plate_give', note?: string, value?: number): Promise<string> {
+  const { data, error } = await db().rpc('admin_extra', { p_code: code.trim().toUpperCase(), p_kind: kind, p_note: note ?? null, p_value: value ?? null });
+  if (error) {
+    if (/admin_extra/.test(error.message)) throw new Error('На сервері ще не запущено SQL з docs/supabase-v17.sql');
+    throw error;
+  }
+  return String(data ?? '');
+}
+
+export interface ChatInfo {
+  friend_id: string;
+  last_body: string;
+  last_at: string;
+  last_from_me: boolean;
+  unread: number;
+}
+
+/** Останнє повідомлення й кількість непрочитаних у кожному чаті (без v17 — порожньо). */
+export async function chatSummary(): Promise<Record<string, ChatInfo>> {
+  if (!me) return {};
+  const { data, error } = await db().rpc('chat_summary');
+  if (error) return {};
+  return Object.fromEntries(((data ?? []) as ChatInfo[]).map((c) => [c.friend_id, { ...c, unread: Number(c.unread) }]));
+}
+
+export async function markRead(friendId: string) {
+  if (!me) return;
+  await db()
+    .rpc('mark_read', { p_friend: friendId })
+    .then(
+      () => {},
+      () => {},
+    );
 }
 
 export async function fetchProfile(id: string): Promise<Profile | null> {
